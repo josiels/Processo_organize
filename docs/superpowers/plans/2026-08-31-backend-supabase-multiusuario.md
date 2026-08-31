@@ -1396,6 +1396,8 @@ Deno.serve(async (req) => {
       email_confirm: true,
     });
     if (novoUsuarioError) {
+      // Compensating cleanup: the org has no admin without this user, don't leave it orphaned.
+      await adminClient.from('organizacoes').delete().eq('id', org.id);
       return new Response(JSON.stringify({ error: novoUsuarioError.message }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -1409,6 +1411,10 @@ Deno.serve(async (req) => {
       nome: admin_nome,
     });
     if (perfilInsertError) {
+      // Compensating cleanup: an auth user with no perfil is a ghost account
+      // that can log in but can't do anything — and the org still has no admin.
+      await adminClient.auth.admin.deleteUser(novoUsuario.user.id);
+      await adminClient.from('organizacoes').delete().eq('id', org.id);
       return new Response(JSON.stringify({ error: perfilInsertError.message }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -1572,6 +1578,9 @@ Deno.serve(async (req) => {
       nome,
     });
     if (perfilInsertError) {
+      // Compensating cleanup: an auth user with no perfil is a ghost account
+      // that can log in but can't do anything.
+      await adminClient.auth.admin.deleteUser(novoUsuario.user.id);
       return new Response(JSON.stringify({ error: perfilInsertError.message }), {
         status: 500,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
