@@ -758,6 +758,22 @@ select ok(true, 'Responsible user can add a historico entry to their own process
 
 reset role;
 
+-- A colleague in the SAME organization — not the owner, not an admin — must
+-- still be able to READ the item for workload transparency (spec section 2:
+-- "vê todos os processos"), even though they cannot edit it.
+insert into auth.users (id, email, encrypted_password, email_confirmed_at)
+values ('00000000-0000-0000-0000-000000000007', 'user.a2@teste.com', 'x', now());
+insert into public.perfis (id, organizacao_id, papel, nome) values
+  ('00000000-0000-0000-0000-000000000007', '10000000-0000-0000-0000-000000000001', 'usuario', 'Usuário A2');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000007', true);
+set local role authenticated;
+select results_eq(
+  $$select descricao from public.itens$$,
+  array['Notebook'],
+  'A colleague in the same organization can read itens for transparency, even though it is not theirs'
+);
+reset role;
+
 insert into auth.users (id, email, encrypted_password, email_confirmed_at)
 values ('00000000-0000-0000-0000-000000000006', 'user.b@teste.com', 'x', now());
 insert into public.organizacoes (id, nome) values ('10000000-0000-0000-0000-000000000002', 'Organização B');
@@ -850,6 +866,30 @@ with check (
       and (public.auth_papel() = 'admin' or p.responsavel_id = auth.uid())
   )
 );
+
+-- The two policies above correctly gate WRITES to admin-or-owner, but a
+-- plain USING/WITH CHECK pair also gates SELECT the same way — which would
+-- stop a colleague from even reading another user's processo detail,
+-- breaking the "vê todos os processos" transparency requirement (spec
+-- section 2). Add a second, purely-permissive SELECT policy: Postgres ORs
+-- permissive policies together for the same command, so this widens read
+-- access to the whole organization without loosening the write policies
+-- above at all.
+create policy "itens_select_transparencia" on public.itens
+for select using (
+  exists (
+    select 1 from public.processos p
+    where p.id = itens.processo_id and p.organizacao_id = public.auth_organizacao_id()
+  )
+);
+
+create policy "processo_fase_historico_select_transparencia" on public.processo_fase_historico
+for select using (
+  exists (
+    select 1 from public.processos p
+    where p.id = processo_fase_historico.processo_id and p.organizacao_id = public.auth_organizacao_id()
+  )
+);
 ```
 
 - [ ] **Step 4: Reset and re-run** — `npx supabase db reset && npx supabase test db` → all pass.
@@ -879,7 +919,7 @@ Create `supabase/tests/database/060_diligencias_observacoes.sql`:
 
 ```sql
 begin;
-select plan(4);
+select plan(6);
 
 select has_table('public', 'diligencias', 'diligencias table should exist');
 select has_table('public', 'observacao_versoes', 'observacao_versoes table should exist');
@@ -916,6 +956,28 @@ values ('50000000-0000-0000-0000-000000000001', 'Aguardando resposta');
 select ok(true, 'Responsible user can log an observação version');
 
 reset role;
+
+-- A colleague in the SAME organization — not the owner, not an admin — must
+-- still be able to READ diligências/observações for workload transparency
+-- (spec section 2: "vê todos os processos"), even though they cannot write.
+insert into auth.users (id, email, encrypted_password, email_confirmed_at)
+values ('00000000-0000-0000-0000-000000000007', 'user.a2@teste.com', 'x', now());
+insert into public.perfis (id, organizacao_id, papel, nome) values
+  ('00000000-0000-0000-0000-000000000007', '10000000-0000-0000-0000-000000000001', 'usuario', 'Usuário A2');
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000007', true);
+set local role authenticated;
+select results_eq(
+  $$select conteudo from public.diligencias$$,
+  array['Enviado ofício ao fornecedor X'],
+  'A colleague in the same organization can read diligências for transparency, even though it is not theirs'
+);
+select results_eq(
+  $$select conteudo from public.observacao_versoes$$,
+  array['Aguardando resposta'],
+  'A colleague in the same organization can read observação versions for transparency, even though it is not theirs'
+);
+reset role;
+
 select * from finish();
 rollback;
 ```
@@ -987,6 +1049,31 @@ with check (
     where h.id = observacao_versoes.processo_fase_historico_id
       and p.organizacao_id = public.auth_organizacao_id()
       and (public.auth_papel() = 'admin' or p.responsavel_id = auth.uid())
+  )
+);
+
+-- Same reasoning as Task 7's *_select_transparencia policies: the two
+-- policies above correctly gate WRITES to admin-or-owner, but also happen to
+-- gate SELECT the same way unless widened — add a purely-permissive,
+-- org-wide SELECT policy per table so a colleague can read (never write)
+-- someone else's diligências/observações, per the transparency requirement.
+create policy "diligencias_select_transparencia" on public.diligencias
+for select using (
+  exists (
+    select 1 from public.processo_fase_historico h
+    join public.processos p on p.id = h.processo_id
+    where h.id = diligencias.processo_fase_historico_id
+      and p.organizacao_id = public.auth_organizacao_id()
+  )
+);
+
+create policy "observacao_versoes_select_transparencia" on public.observacao_versoes
+for select using (
+  exists (
+    select 1 from public.processo_fase_historico h
+    join public.processos p on p.id = h.processo_id
+    where h.id = observacao_versoes.processo_fase_historico_id
+      and p.organizacao_id = public.auth_organizacao_id()
   )
 );
 ```
