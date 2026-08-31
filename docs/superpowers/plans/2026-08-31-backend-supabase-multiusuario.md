@@ -610,14 +610,18 @@ select results_eq(
 update public.processos set responsavel_id = '00000000-0000-0000-0000-000000000003'
 where id = '40000000-0000-0000-0000-000000000001';
 select ok(true, 'Usuário can self-assign an orphan processo');
--- another usuário cannot steal an already-assigned processo
+-- Another usuário cannot steal an already-assigned processo. This UPDATE's
+-- USING clause does not match the row for this caller, so Postgres RLS
+-- silently filters it to 0 rows affected rather than raising an exception
+-- (unlike INSERT, a non-matching UPDATE is not an error) — assert the data
+-- is unchanged, not that an exception was thrown.
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000005', true);
-select throws_ok(
-  $$update public.processos set responsavel_id = '00000000-0000-0000-0000-000000000005'
-    where id = '40000000-0000-0000-0000-000000000001'$$,
-  '42501',
-  null,
-  'A different usuário cannot take a processo already assigned to someone else'
+update public.processos set responsavel_id = '00000000-0000-0000-0000-000000000005'
+where id = '40000000-0000-0000-0000-000000000001';
+select results_eq(
+  $$select responsavel_id from public.processos where id = '40000000-0000-0000-0000-000000000001'$$,
+  array['00000000-0000-0000-0000-000000000003'::uuid],
+  'A different usuário cannot take a processo already assigned to someone else (RLS silently no-ops the UPDATE)'
 );
 reset role;
 
