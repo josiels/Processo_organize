@@ -266,7 +266,7 @@ begin
   end if;
   return new;
 end;
-$$ language plpgsql;
+$$;
 
 create trigger perfis_proteger_campos_trigger
 before update on public.perfis
