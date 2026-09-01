@@ -34,10 +34,14 @@ Deno.serve(async (req) => {
 
     const { data: perfilCaller, error: perfilError } = await adminClient
       .from('perfis')
-      .select('papel')
+      .select('papel, ativo')
       .eq('id', userResult.user.id)
       .single();
-    if (perfilError || perfilCaller?.papel !== 'super_admin') {
+    // This query runs with the service-role key, so it bypasses RLS and does
+    // not inherit the `ativo` filter that auth_papel()/auth_organizacao_id()
+    // apply to every policy — check it explicitly, in the same short-circuit as
+    // the role check, so a deactivated super_admin cannot create organizations.
+    if (perfilError || perfilCaller?.papel !== 'super_admin' || !perfilCaller.ativo) {
       return new Response(JSON.stringify({ error: 'Apenas super_admin pode criar organizações' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },

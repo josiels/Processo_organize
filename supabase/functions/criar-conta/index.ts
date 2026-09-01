@@ -34,10 +34,17 @@ Deno.serve(async (req) => {
 
     const { data: perfilCaller, error: perfilError } = await adminClient
       .from('perfis')
-      .select('papel, organizacao_id')
+      .select('papel, organizacao_id, ativo')
       .eq('id', userResult.user.id)
       .single();
-    if (perfilError || perfilCaller?.papel !== 'admin' || !perfilCaller.organizacao_id) {
+    // This query runs with the service-role key, so it bypasses RLS and does
+    // not inherit the `ativo` filter that auth_papel()/auth_organizacao_id()
+    // apply to every policy — check it explicitly, in the same short-circuit as
+    // the role check, so a deactivated admin cannot create accounts.
+    if (
+      perfilError || perfilCaller?.papel !== 'admin' || !perfilCaller.organizacao_id ||
+      !perfilCaller.ativo
+    ) {
       return new Response(JSON.stringify({ error: 'Apenas admin pode criar contas' }), {
         status: 403,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
