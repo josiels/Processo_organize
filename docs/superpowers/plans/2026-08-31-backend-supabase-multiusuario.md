@@ -2,45 +2,55 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Build and locally test the complete Postgres schema, Row-Level Security policies, and Edge Functions that back the multiusuário/multiorganização pivot of Organize_Processo — entirely against a local Supabase stack (Docker), producing a backend that Plan 2 (Android data layer) can connect to.
+**Goal:** Build and test the complete Postgres schema, Row-Level Security policies, and Edge Functions that back the multiusuário/multiorganização pivot of Organize_Processo — against a real cloud Supabase project (no Docker), producing a backend that Plan 2 (Android data layer) can connect to.
 
 **Architecture:** Multi-tenant Postgres schema under Supabase, isolated by `organizacao_id` and enforced by RLS (not just app logic). Privileged operations (creating organizations, creating accounts, designating a processo) go through either Edge Functions (Deno/TypeScript, using the service role key) or a `SECURITY DEFINER` Postgres function (`designar_processo`) that explicitly re-validates permissions before bypassing RLS for a coordinated multi-table write.
 
-**Tech Stack:** Supabase CLI, PostgreSQL 15 (via Supabase's local Docker stack), pgTAP for database tests, Deno + TypeScript for Edge Functions, Node.js (already installed) for one bootstrap script.
+**Tech Stack:** Supabase CLI (linked to a cloud project, not a local stack), a real Supabase cloud project (Postgres 17), pgTAP for database tests, Deno + TypeScript for Edge Functions, Node.js for `scripts/run_sql.mjs` and one bootstrap script.
 
 **Spec:** `docs/superpowers/specs/2026-08-31-multiusuario-gestao-processos-design.md`
 
+## Why this plan targets a cloud project, not local Docker
+
+This plan originally targeted a fully local Supabase stack (`supabase start` under Docker). That was abandoned after two real blockers, in order:
+
+1. **Docker Desktop couldn't be installed.** The user is on a remote session and cannot approve the interactive Windows UAC elevation prompt Docker's installer requires. A scheduled-task elevation bypass was attempted with the user's explicit authorization and was denied by this machine's domain group policy (it appears to be a government-domain machine with deliberate anti-privilege-escalation hardening) — this was not pursued further.
+2. **This network blocks outbound direct Postgres connections** (ports 5432 and 6543) entirely — confirmed by both `db.<ref>.supabase.co` failing DNS resolution and the connection-pooler host timing out on both transaction (6543) and session (5432) modes. This means even a linked *cloud* project can't be reached via `supabase db push`, `supabase test db`, or `psql` from this machine — only HTTPS (443) gets through.
+
+The workaround, verified working end-to-end before this plan was rewritten: the Supabase **Management API**'s `POST https://api.supabase.com/v1/projects/{ref}/database/query` endpoint runs arbitrary SQL over HTTPS. `scripts/run_sql.mjs` (Task 1) wraps this endpoint. Every migration and every pgTAP test file in this plan is applied by running `node scripts/run_sql.mjs <file>` instead of `supabase db push` / `supabase test db`. Edge Functions deploy via `supabase functions deploy --use-api`, which bundles server-side over HTTPS instead of using a local Docker-based bundler — also verified working on this network.
+
+If a future session on a different machine has Docker available, everything in this plan (migration files, test files, Edge Function code) is unchanged and portable to the local-stack workflow — only the *invocation* commands in each task's steps would need to switch back to `supabase db push`/`supabase test db`/`supabase functions serve`.
+
 ## Global Constraints
 
-- All local development and testing happens against the **local Supabase stack** (`supabase start`, Docker Desktop) — never against a hosted project in this plan.
+- All schema/RLS changes and pgTAP tests run against the **linked cloud Supabase project** (`isjhxusoxeuxfoxooppe`), invoked via `node scripts/run_sql.mjs <path-to-sql-file>` — never `supabase db push`, `supabase test db`, `supabase db reset`, or `psql` (all blocked on this network; see above).
+- Credentials live only in `supabase/.env.local` (gitignored) and are loaded automatically by `scripts/run_sql.mjs`. Never hardcode a key/token/password in a committed file.
+- Every pgTAP test file ends with `select coalesce(string_agg(f, E'\n'), 'ALL TESTS PASSED') as summary from finish() f;` (not the bare `select * from finish();` an all-local plan would use) — this is what lets `run_sql.mjs` detect pass/fail from a single deterministic row, since the Management API only returns the last non-empty resultset from a multi-statement query.
+- Because there is no `db reset` here, migrations are additive and permanent on the cloud project from the moment they're applied — there is no "wipe and start over" step. A test file's own `begin; ... rollback;` wrapping is what keeps its fixture data from persisting, not a database reset.
 - Every table that holds organization-scoped data has Row-Level Security **enabled and forced** — no table is left with RLS disabled.
 - No client (the future Android app, using the anon key) can create accounts or organizations directly — those two operations only exist as Edge Functions using the service role key.
 - Enum/table/column names are in Portuguese, matching the spec and the existing Kotlin domain vocabulary (`fase`, `processo`, `designacao`, etc.).
 - `status_geral_processo` enum values are lowercase snake_case mirroring the existing Kotlin `StatusGeralProcesso` enum: `em_andamento`, `suspenso`, `concluido`, `cancelado`.
 
-**Troubleshooting note (applies to every task from Task 3 onward):** every pgTAP test file inserts test fixture rows directly into `auth.users` with only `(id, email, encrypted_password, email_confirmed_at)` — these fixtures are never used to actually log in (RLS tests simulate the caller via `set_config('request.jwt.claim.sub', ...)`, not real login), so this minimal column set is normally sufficient. If a test fails with a Postgres `null value in column "..." of relation "users" violates not-null constraint` error instead of the expected assertion failure, the local Supabase Auth schema version requires more columns — add `instance_id, aud, role` to the column list and `'00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'` as the first three values of every row in that file, then re-run.
+**Troubleshooting note (applies to every task from Task 3 onward):** every pgTAP test file inserts test fixture rows directly into `auth.users` with only `(id, email, encrypted_password, email_confirmed_at)` — these fixtures are never used to actually log in (RLS tests simulate the caller via `set_config('request.jwt.claim.sub', ...)`, not real login), so this minimal column set is normally sufficient. If a test fails with a Postgres `null value in column "..." of relation "users" violates not-null constraint` error instead of the expected assertion failure, the cloud project's Supabase Auth schema version requires more columns — add `instance_id, aud, role` to the column list and `'00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated'` as the first three values of every row in that file, then re-run.
 
 ---
 
-## Task 1: Local Supabase environment
+## Task 1: Cloud Supabase project + HTTPS SQL runner
 
 **Files:**
 - Create: `supabase/config.toml` (generated by `supabase init`)
 - Create: `package.json` (project root, to pin the Supabase CLI as a dev dependency)
+- Create: `scripts/run_sql.mjs` (runs a `.sql` file against the linked cloud project over HTTPS)
+- Create: `supabase/.env.local` (gitignored — real project URL/keys/token/password)
 
 **Interfaces:**
-- Produces: a running local Supabase stack reachable at the URLs printed by `npx supabase status` (API URL, DB URL, anon key, service role key) — every later task's tests connect to this.
+- Produces: a linked cloud Supabase project plus `node scripts/run_sql.mjs <path-to-sql-file>` — every later task's migrations and tests run through this command instead of `supabase db push` / `supabase test db` (both unreachable on this network; see "Why this plan targets a cloud project" above).
+- `run_sql.mjs` contract: reads `supabase/.env.local` for `SUPABASE_PROJECT_REF` and `SUPABASE_ACCESS_TOKEN`, POSTs the file's contents as `{ query }` to `https://api.supabase.com/v1/projects/{ref}/database/query`, prints the JSON result, and sets a non-zero exit code on an HTTP error OR when the response contains a row with a `summary` column not equal to exactly `'ALL TESTS PASSED'` (the pgTAP pass/fail signal — see Global Constraints).
 
-- [ ] **Step 1: Install Docker Desktop**
+A real Supabase account and an empty cloud project ("Projeto_Organize" or similar) must exist before this task starts — creating the account/project itself is a manual step outside this plan (done via the Supabase dashboard).
 
-Manual step (cannot be automated): install Docker Desktop for Windows from https://www.docker.com/products/docker-desktop/, start it, and wait until it reports "Docker Desktop is running" in its tray icon. This is a one-time prerequisite for the whole plan.
-
-- [ ] **Step 2: Verify Docker is running**
-
-Run: `docker info`
-Expected: prints daemon info (server version, containers, etc.) without a "Cannot connect to the Docker daemon" error.
-
-- [ ] **Step 3: Add the Supabase CLI as a dev dependency**
+- [ ] **Step 1: Add the Supabase CLI as a dev dependency**
 
 At the project root (`C:\Users\03557061485\AndroidStudioProjects\Organize_Processo`), run:
 
@@ -49,25 +59,149 @@ npm init -y
 npm install --save-dev supabase
 ```
 
-- [ ] **Step 4: Initialize the Supabase project**
+Add `node_modules/` to `.gitignore` if not already present.
+
+- [ ] **Step 2: Initialize the Supabase project**
 
 Run: `npx supabase init`
-Expected: creates a `supabase/` directory with `config.toml`, `migrations/`, `functions/`, `seed.sql`.
+Expected: creates a `supabase/` directory with `config.toml`, `migrations/`, `functions/`, `seed.sql`, and a `supabase/.gitignore` that already excludes `.branches`, `.temp`, `.env.keys`, `.env.local`, `.env.*.local`.
 
-- [ ] **Step 5: Start the local stack**
+- [ ] **Step 3: Record project credentials**
 
-Run: `npx supabase start`
-Expected: after downloading images (first run only), prints a table with `API URL`, `DB URL`, `anon key`, `service_role key`. Keep this output — later tasks reference these values by name (never hardcode the actual key strings in code or migrations).
+Create `supabase/.env.local` (already covered by `supabase/.gitignore` — confirm with `git check-ignore -v supabase/.env.local` before continuing) with the real project's values, obtained from the Supabase dashboard (Project Settings → API, and Project Settings → Access Tokens for a personal access token):
 
-- [ ] **Step 6: Commit**
-
-```bash
-git init
-git add package.json package-lock.json supabase/config.toml supabase/.gitignore .gitignore
-git commit -m "chore: initialize local Supabase project"
+```
+SUPABASE_URL=<Project URL, e.g. https://<ref>.supabase.co>
+SUPABASE_ANON_KEY=<anon public key>
+SUPABASE_SERVICE_ROLE_KEY=<service_role secret key>
+SUPABASE_PROJECT_REF=<project ref, the subdomain of SUPABASE_URL>
+SUPABASE_ACCESS_TOKEN=<personal access token, starts with sbp_>
+SUPABASE_DB_PASSWORD=<the database password chosen when the project was created>
 ```
 
-(If `git init` reports the repo already exists, skip it and just `git add`/`git commit`.)
+Never commit this file, print its contents in a commit message, or paste its values into any file under version control.
+
+- [ ] **Step 4: Log in and link the CLI to the cloud project**
+
+```bash
+npx supabase login --token <SUPABASE_ACCESS_TOKEN value>
+npx supabase link --project-ref <SUPABASE_PROJECT_REF value> --password '<SUPABASE_DB_PASSWORD value>'
+```
+
+Expected: `login` reports success; `link` reports "Finished supabase link" (it may warn that it cannot reach the database directly to compare migration history — that warning is expected on this network and does not block later steps, since this plan never uses `supabase db push`/`db pull`).
+
+- [ ] **Step 5: Write `scripts/run_sql.mjs`**
+
+Create `scripts/run_sql.mjs`:
+
+```javascript
+#!/usr/bin/env node
+// Runs a .sql file against the linked cloud Supabase project over HTTPS
+// (the Management API's /database/query endpoint), since this network
+// blocks outbound direct Postgres connections (ports 5432/6543) that
+// `supabase db push` / `supabase test db` / `psql` would need.
+//
+// Usage: node scripts/run_sql.mjs <path-to-sql-file>
+//
+// For pgTAP test files: exit code reflects pass/fail by checking for a
+// "summary" column equal to exactly "ALL TESTS PASSED" (see the
+// finish()-aggregation convention documented in the plan). For plain
+// migrations: exit code reflects the HTTP response status only.
+//
+// Uses process.exitCode (not process.exit()) throughout: calling
+// process.exit() right after an awaited fetch() has crashed with a
+// libuv assertion on this machine's Node/Windows combination.
+
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
+
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(scriptDir, '..');
+
+function loadEnvLocal() {
+  const envPath = join(repoRoot, 'supabase', '.env.local');
+  if (!existsSync(envPath)) return;
+  for (const line of readFileSync(envPath, 'utf8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    const value = trimmed.slice(eq + 1).trim();
+    if (!(key in process.env)) process.env[key] = value;
+  }
+}
+
+async function main() {
+  loadEnvLocal();
+
+  const [, , sqlFilePath] = process.argv;
+  if (!sqlFilePath) {
+    console.error('Usage: node scripts/run_sql.mjs <path-to-sql-file>');
+    process.exitCode = 1;
+    return;
+  }
+
+  const projectRef = process.env.SUPABASE_PROJECT_REF;
+  const accessToken = process.env.SUPABASE_ACCESS_TOKEN;
+  if (!projectRef || !accessToken) {
+    console.error('Missing SUPABASE_PROJECT_REF / SUPABASE_ACCESS_TOKEN — check supabase/.env.local.');
+    process.exitCode = 1;
+    return;
+  }
+
+  const query = readFileSync(sqlFilePath, 'utf8');
+
+  const response = await fetch(`https://api.supabase.com/v1/projects/${projectRef}/database/query`, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ query }),
+  });
+
+  const body = await response.json();
+
+  if (!response.ok) {
+    console.error(`FAIL (HTTP ${response.status}):`, body.message ?? JSON.stringify(body));
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(JSON.stringify(body, null, 2));
+
+  const summaryRow = Array.isArray(body) ? body.find((row) => 'summary' in row) : null;
+  if (summaryRow) {
+    if (summaryRow.summary === 'ALL TESTS PASSED') {
+      console.log('RESULT: PASS');
+      process.exitCode = 0;
+      return;
+    }
+    console.error('RESULT: FAIL —', summaryRow.summary);
+    process.exitCode = 1;
+    return;
+  }
+
+  process.exitCode = 0;
+}
+
+await main();
+```
+
+- [ ] **Step 6: Verify the runner works end-to-end**
+
+Create a throwaway file `supabase/tests/database/_manual_check.sql` containing `select 1 as ok;`, run `node scripts/run_sql.mjs supabase/tests/database/_manual_check.sql`, confirm it prints the JSON row `{"ok": 1}` and exits 0, then delete the throwaway file (it is not part of the test suite Task 2 builds).
+
+- [ ] **Step 7: Commit**
+
+```bash
+git add package.json package-lock.json .gitignore supabase/config.toml supabase/.gitignore scripts/run_sql.mjs
+git commit -m "chore: link cloud Supabase project, add HTTPS SQL runner"
+```
+
+Do NOT `git add supabase/.env.local` — verify with `git status` that it does not appear as a staged or trackable file before committing.
 
 ---
 
@@ -77,8 +211,8 @@ git commit -m "chore: initialize local Supabase project"
 - Create: `supabase/tests/database/000_smoke_test.sql`
 
 **Interfaces:**
-- Consumes: local stack from Task 1.
-- Produces: a working `npx supabase test db` command that later tasks' test files plug into (files matching `supabase/tests/database/*.sql`, run in filename order).
+- Consumes: `scripts/run_sql.mjs` from Task 1.
+- Produces: a working `node scripts/run_sql.mjs <file>` pattern that later tasks' migrations and test files plug into (test files live under `supabase/tests/database/*.sql`, applied and run in filename order).
 
 - [ ] **Step 1: Enable the pgtap extension via a migration**
 
@@ -97,7 +231,7 @@ Create `supabase/tests/database/000_smoke_test.sql`:
 begin;
 select plan(1);
 select ok(1 = 1, 'pgTAP test harness is wired up');
-select * from finish();
+select coalesce(string_agg(f, E'\n'), 'ALL TESTS PASSED') as summary from finish() f;
 rollback;
 ```
 
@@ -105,10 +239,10 @@ rollback;
 
 Run:
 ```bash
-npx supabase db reset
-npx supabase test db
+node scripts/run_sql.mjs supabase/migrations/<timestamp>_habilitar_pgtap.sql
+node scripts/run_sql.mjs supabase/tests/database/000_smoke_test.sql
 ```
-Expected: `npx supabase db reset` reapplies all migrations cleanly; `npx supabase test db` prints `ok 1 - pgTAP test harness is wired up` and `# 1..1` with no failures.
+Expected: the migration run prints an empty successful result (`[]`); the test run prints `RESULT: PASS` (the `summary` row equals `'ALL TESTS PASSED'`) and exits 0.
 
 - [ ] **Step 4: Commit**
 
@@ -201,13 +335,13 @@ update public.perfis set notificar_prazo = false where id = '00000000-0000-0000-
 select ok(true, 'Self-editing notificar_prazo did not raise');
 reset role;
 
-select * from finish();
+select coalesce(string_agg(f, E'\n'), 'ALL TESTS PASSED') as summary from finish() f;
 rollback;
 ```
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `npx supabase test db`
+Run: `node scripts/run_sql.mjs supabase/tests/database/010_organizacoes_perfis.sql`
 Expected: FAIL — `organizacoes`/`perfis`/`papel_usuario` do not exist yet.
 
 - [ ] **Step 3: Write the migration**
@@ -292,14 +426,14 @@ for update using (id = auth.uid())
 with check (id = auth.uid());
 ```
 
-- [ ] **Step 4: Reset the database and run the test again**
+- [ ] **Step 4: Apply the migration and run the test again**
 
 Run:
 ```bash
-npx supabase db reset
-npx supabase test db
+node scripts/run_sql.mjs supabase/migrations/<timestamp>_criar_organizacoes_perfis.sql
+node scripts/run_sql.mjs supabase/tests/database/010_organizacoes_perfis.sql
 ```
-Expected: all 9 assertions in `010_organizacoes_perfis.sql` (and the earlier smoke test) pass.
+Expected: `RESULT: PASS` — all 9 assertions in `010_organizacoes_perfis.sql` pass.
 
 - [ ] **Step 5: Commit**
 
@@ -362,13 +496,13 @@ select throws_ok(
 );
 
 reset role;
-select * from finish();
+select coalesce(string_agg(f, E'\n'), 'ALL TESTS PASSED') as summary from finish() f;
 rollback;
 ```
 
 - [ ] **Step 2: Run test, verify it fails**
 
-Run: `npx supabase test db` → FAIL (table doesn't exist).
+Run: `node scripts/run_sql.mjs supabase/tests/database/020_device_tokens.sql` → FAIL (table doesn't exist).
 
 - [ ] **Step 3: Write the migration**
 
@@ -393,13 +527,13 @@ for all using (perfil_id = auth.uid())
 with check (perfil_id = auth.uid());
 ```
 
-- [ ] **Step 4: Reset and re-run**
+- [ ] **Step 4: Apply the migration and re-run**
 
 ```bash
-npx supabase db reset
-npx supabase test db
+node scripts/run_sql.mjs supabase/migrations/<timestamp>_criar_device_tokens.sql
+node scripts/run_sql.mjs supabase/tests/database/020_device_tokens.sql
 ```
-Expected: all assertions pass.
+Expected: `RESULT: PASS`.
 
 - [ ] **Step 5: Commit**
 
@@ -465,11 +599,11 @@ select results_eq(
 );
 reset role;
 
-select * from finish();
+select coalesce(string_agg(f, E'\n'), 'ALL TESTS PASSED') as summary from finish() f;
 rollback;
 ```
 
-- [ ] **Step 2: Run test, verify it fails** — `npx supabase test db`
+- [ ] **Step 2: Run test, verify it fails** — `node scripts/run_sql.mjs supabase/tests/database/030_tipos_processo_fases.sql`
 
 - [ ] **Step 3: Write the migration**
 
@@ -525,7 +659,7 @@ with check (
 );
 ```
 
-- [ ] **Step 4: Reset and re-run** — `npx supabase db reset && npx supabase test db` → all pass.
+- [ ] **Step 4: Apply the migration and re-run** — `node scripts/run_sql.mjs supabase/migrations/<timestamp>_criar_tipos_processo_fases.sql` then `node scripts/run_sql.mjs supabase/tests/database/030_tipos_processo_fases.sql` → `RESULT: PASS`.
 
 - [ ] **Step 5: Commit**
 
@@ -625,11 +759,11 @@ select results_eq(
 );
 reset role;
 
-select * from finish();
+select coalesce(string_agg(f, E'\n'), 'ALL TESTS PASSED') as summary from finish() f;
 rollback;
 ```
 
-- [ ] **Step 2: Run test, verify it fails** — `npx supabase test db`
+- [ ] **Step 2: Run test, verify it fails** — `node scripts/run_sql.mjs supabase/tests/database/040_processos.sql`
 
 - [ ] **Step 3: Write the migration**
 
@@ -689,7 +823,7 @@ for delete using (
 );
 ```
 
-- [ ] **Step 4: Reset and re-run** — `npx supabase db reset && npx supabase test db` → all pass.
+- [ ] **Step 4: Apply the migration and re-run** — `node scripts/run_sql.mjs supabase/migrations/<timestamp>_criar_processos.sql` then `node scripts/run_sql.mjs supabase/tests/database/040_processos.sql` → `RESULT: PASS`.
 
 - [ ] **Step 5: Commit**
 
@@ -788,11 +922,11 @@ select results_eq(
 );
 reset role;
 
-select * from finish();
+select coalesce(string_agg(f, E'\n'), 'ALL TESTS PASSED') as summary from finish() f;
 rollback;
 ```
 
-- [ ] **Step 2: Run test, verify it fails** — `npx supabase test db`
+- [ ] **Step 2: Run test, verify it fails** — `node scripts/run_sql.mjs supabase/tests/database/050_itens_historico.sql`
 
 - [ ] **Step 3: Write the migration**
 
@@ -892,7 +1026,7 @@ for select using (
 );
 ```
 
-- [ ] **Step 4: Reset and re-run** — `npx supabase db reset && npx supabase test db` → all pass.
+- [ ] **Step 4: Apply the migration and re-run** — `node scripts/run_sql.mjs supabase/migrations/<timestamp>_criar_itens_historico.sql` then `node scripts/run_sql.mjs supabase/tests/database/050_itens_historico.sql` → `RESULT: PASS`.
 
 - [ ] **Step 5: Commit**
 
@@ -978,11 +1112,11 @@ select results_eq(
 );
 reset role;
 
-select * from finish();
+select coalesce(string_agg(f, E'\n'), 'ALL TESTS PASSED') as summary from finish() f;
 rollback;
 ```
 
-- [ ] **Step 2: Run test, verify it fails** — `npx supabase test db`
+- [ ] **Step 2: Run test, verify it fails** — `node scripts/run_sql.mjs supabase/tests/database/060_diligencias_observacoes.sql`
 
 - [ ] **Step 3: Write the migration**
 
@@ -1078,7 +1212,7 @@ for select using (
 );
 ```
 
-- [ ] **Step 4: Reset and re-run** — `npx supabase db reset && npx supabase test db` → all pass.
+- [ ] **Step 4: Apply the migration and re-run** — `node scripts/run_sql.mjs supabase/migrations/<timestamp>_criar_diligencias_observacoes.sql` then `node scripts/run_sql.mjs supabase/tests/database/060_diligencias_observacoes.sql` → `RESULT: PASS`.
 
 - [ ] **Step 5: Commit**
 
@@ -1182,11 +1316,11 @@ select results_eq(
   'Usuário can self-assign an orphan processo'
 );
 
-select * from finish();
+select coalesce(string_agg(f, E'\n'), 'ALL TESTS PASSED') as summary from finish() f;
 rollback;
 ```
 
-- [ ] **Step 2: Run test, verify it fails** — `npx supabase test db`
+- [ ] **Step 2: Run test, verify it fails** — `node scripts/run_sql.mjs supabase/tests/database/070_designacoes.sql`
 
 - [ ] **Step 3: Write the migration**
 
@@ -1288,7 +1422,7 @@ revoke all on function public.designar_processo(uuid, uuid) from public;
 grant execute on function public.designar_processo(uuid, uuid) to authenticated;
 ```
 
-- [ ] **Step 4: Reset and re-run** — `npx supabase db reset && npx supabase test db` → all pass.
+- [ ] **Step 4: Apply the migration and re-run** — `node scripts/run_sql.mjs supabase/migrations/<timestamp>_criar_designacoes_e_funcao.sql` then `node scripts/run_sql.mjs supabase/tests/database/070_designacoes.sql` → `RESULT: PASS`.
 
 - [ ] **Step 5: Commit**
 
@@ -1305,8 +1439,8 @@ git commit -m "feat: designacoes table and designar_processo RPC"
 - Create: `scripts/bootstrap_super_admin.mjs`
 
 **Interfaces:**
-- Consumes: local stack's service role key (from `npx supabase status`).
-- Produces: one real, login-capable `super_admin` account in the local stack — Task 11/12's Edge Function tests need a real JWT for a super_admin caller, which can only come from a real GoTrue user (the pgTAP fixtures in earlier tasks insert directly into `auth.users` for RLS testing only, and cannot log in for real).
+- Consumes: the cloud project's service role key, loaded from `supabase/.env.local` (same convention as `scripts/run_sql.mjs` from Task 1).
+- Produces: one real, login-capable `super_admin` account in the cloud project — Task 11/12's Edge Function tests need a real JWT for a super_admin caller, which can only come from a real GoTrue user (the pgTAP fixtures in earlier tasks insert directly into `auth.users` for RLS testing only, and cannot log in for real).
 
 - [ ] **Step 1: Install the Supabase JS client**
 
@@ -1316,60 +1450,90 @@ npm install @supabase/supabase-js
 
 - [ ] **Step 2: Write the script**
 
-Create `scripts/bootstrap_super_admin.mjs`:
+Create `scripts/bootstrap_super_admin.mjs`. It reuses the same `supabase/.env.local` loader convention as `scripts/run_sql.mjs` (Task 1), and — per that script's documented fix for this machine — never calls `process.exit()` after an `await`, only `process.exitCode` with an explicit `return`:
 
 ```javascript
 import { createClient } from '@supabase/supabase-js';
+import { readFileSync, existsSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { dirname, join } from 'node:path';
 
-const SUPABASE_URL = process.env.SUPABASE_URL ?? 'http://127.0.0.1:54321';
-const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
-const EMAIL = process.argv[2];
-const PASSWORD = process.argv[3];
-const NOME = process.argv[4] ?? 'Super Admin';
+const scriptDir = dirname(fileURLToPath(import.meta.url));
+const repoRoot = join(scriptDir, '..');
 
-if (!SERVICE_ROLE_KEY) {
-  console.error('Set SUPABASE_SERVICE_ROLE_KEY (from `npx supabase status`) before running this script.');
-  process.exit(1);
-}
-if (!EMAIL || !PASSWORD) {
-  console.error('Usage: node scripts/bootstrap_super_admin.mjs <email> <senha> [nome]');
-  process.exit(1);
-}
-
-const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
-  auth: { autoRefreshToken: false, persistSession: false }
-});
-
-const { data: userData, error: userError } = await admin.auth.admin.createUser({
-  email: EMAIL,
-  password: PASSWORD,
-  email_confirm: true
-});
-if (userError) {
-  console.error('Failed to create auth user:', userError.message);
-  process.exit(1);
+function loadEnvLocal() {
+  const envPath = join(repoRoot, 'supabase', '.env.local');
+  if (!existsSync(envPath)) return;
+  for (const line of readFileSync(envPath, 'utf8').split('\n')) {
+    const trimmed = line.trim();
+    if (!trimmed || trimmed.startsWith('#')) continue;
+    const eq = trimmed.indexOf('=');
+    if (eq === -1) continue;
+    const key = trimmed.slice(0, eq).trim();
+    const value = trimmed.slice(eq + 1).trim();
+    if (!(key in process.env)) process.env[key] = value;
+  }
 }
 
-const { error: perfilError } = await admin.from('perfis').insert({
-  id: userData.user.id,
-  organizacao_id: null,
-  papel: 'super_admin',
-  nome: NOME
-});
-if (perfilError) {
-  console.error('Failed to create perfil row:', perfilError.message);
-  process.exit(1);
+async function main() {
+  loadEnvLocal();
+
+  const SUPABASE_URL = process.env.SUPABASE_URL;
+  const SERVICE_ROLE_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+  const EMAIL = process.argv[2];
+  const PASSWORD = process.argv[3];
+  const NOME = process.argv[4] ?? 'Super Admin';
+
+  if (!SUPABASE_URL || !SERVICE_ROLE_KEY) {
+    console.error('Missing SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY — check supabase/.env.local.');
+    process.exitCode = 1;
+    return;
+  }
+  if (!EMAIL || !PASSWORD) {
+    console.error('Usage: node scripts/bootstrap_super_admin.mjs <email> <senha> [nome]');
+    process.exitCode = 1;
+    return;
+  }
+
+  const admin = createClient(SUPABASE_URL, SERVICE_ROLE_KEY, {
+    auth: { autoRefreshToken: false, persistSession: false }
+  });
+
+  const { data: userData, error: userError } = await admin.auth.admin.createUser({
+    email: EMAIL,
+    password: PASSWORD,
+    email_confirm: true
+  });
+  if (userError) {
+    console.error('Failed to create auth user:', userError.message);
+    process.exitCode = 1;
+    return;
+  }
+
+  const { error: perfilError } = await admin.from('perfis').insert({
+    id: userData.user.id,
+    organizacao_id: null,
+    papel: 'super_admin',
+    nome: NOME
+  });
+  if (perfilError) {
+    console.error('Failed to create perfil row:', perfilError.message);
+    process.exitCode = 1;
+    return;
+  }
+
+  console.log(`super_admin created: ${EMAIL} (id: ${userData.user.id})`);
 }
 
-console.log(`super_admin created: ${EMAIL} (id: ${userData.user.id})`);
+await main();
 ```
 
-- [ ] **Step 3: Run it against the local stack**
+- [ ] **Step 3: Run it against the cloud project**
 
-Run (replacing the service role key with the value `npx supabase status` printed in Task 1):
+Run (credentials come from `supabase/.env.local`, loaded automatically):
 
 ```bash
-SUPABASE_SERVICE_ROLE_KEY=<paste local service_role key> node scripts/bootstrap_super_admin.mjs super@local.test senha-teste-123 "Super Admin Local"
+node scripts/bootstrap_super_admin.mjs super@local.test senha-teste-123 "Super Admin Local"
 ```
 
 Expected: prints `super_admin created: super@local.test (id: <uuid>)`.
@@ -1392,7 +1556,7 @@ git commit -m "chore: add local super_admin bootstrap script"
 
 **Interfaces:**
 - Consumes: the bootstrap super_admin account from Task 10.
-- Produces: a deployed-locally Edge Function reachable at `http://127.0.0.1:54321/functions/v1/criar-organizacao`, accepting `POST { nome_organizacao, admin_nome, admin_email, admin_senha }` with an `Authorization: Bearer <super_admin JWT>` header, returning `{ organizacao_id, admin_id }` on success.
+- Produces: an Edge Function deployed to the cloud project, reachable at `<SUPABASE_URL>/functions/v1/criar-organizacao`, accepting `POST { nome_organizacao, admin_nome, admin_email, admin_senha }` with an `Authorization: Bearer <super_admin JWT>` header, returning `{ organizacao_id, admin_id }` on success.
 
 - [ ] **Step 1: Write the shared CORS helper**
 
@@ -1529,10 +1693,10 @@ Create `supabase/tests/functions/test_criar_organizacao.sh`:
 #!/usr/bin/env bash
 set -euo pipefail
 
-SUPER_ADMIN_EMAIL="${1:?usage: test_criar_organizacao.sh <super_admin_email> <super_admin_senha> <anon_key>}"
+SUPER_ADMIN_EMAIL="${1:?usage: test_criar_organizacao.sh <super_admin_email> <super_admin_senha> <anon_key> <api_url>}"
 SUPER_ADMIN_PASSWORD="${2:?}"
 ANON_KEY="${3:?}"
-API_URL="http://127.0.0.1:54321"
+API_URL="${4:?}"
 
 JWT=$(curl -s -X POST "$API_URL/auth/v1/token?grant_type=password" \
   -H "apikey: $ANON_KEY" -H "Content-Type: application/json" \
@@ -1555,24 +1719,30 @@ echo "$BODY" | grep -q "organizacao_id" || { echo "FAIL: response missing organi
 echo "PASS"
 ```
 
-- [ ] **Step 4: Serve functions locally and run the test**
+- [ ] **Step 4: Deploy the function and run the test**
 
-In one terminal: `npx supabase functions serve --env-file supabase/.env.local` (create `supabase/.env.local` with `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` copied from `npx supabase status` — this file must be added to `.gitignore`, never committed).
+Deploy over HTTPS (no Docker-based bundler needed — this is the same `--use-api` path verified working on this network):
 
-In another terminal:
+```bash
+npx supabase functions deploy criar-organizacao --use-api
+```
+
+Then, with `SUPABASE_URL` and `SUPABASE_ANON_KEY` from `supabase/.env.local`:
+
 ```bash
 chmod +x supabase/tests/functions/test_criar_organizacao.sh
-./supabase/tests/functions/test_criar_organizacao.sh super@local.test senha-teste-123 <paste local anon key>
+./supabase/tests/functions/test_criar_organizacao.sh super@local.test senha-teste-123 <SUPABASE_ANON_KEY value> <SUPABASE_URL value>
 ```
 Expected: `PASS`.
 
 - [ ] **Step 5: Commit**
 
 ```bash
-echo "supabase/.env.local" >> .gitignore
-git add supabase/functions supabase/tests/functions .gitignore
+git add supabase/functions supabase/tests/functions
 git commit -m "feat: criar-organizacao Edge Function"
 ```
+
+(`supabase/.env.local` is already gitignored from Task 1 — confirm it does not appear in `git status` before committing.)
 
 ---
 
@@ -1695,10 +1865,10 @@ Create `supabase/tests/functions/test_criar_conta.sh`:
 #!/usr/bin/env bash
 set -euo pipefail
 
-ADMIN_EMAIL="${1:?usage: test_criar_conta.sh <admin_email> <admin_senha> <anon_key>}"
+ADMIN_EMAIL="${1:?usage: test_criar_conta.sh <admin_email> <admin_senha> <anon_key> <api_url>}"
 ADMIN_PASSWORD="${2:?}"
 ANON_KEY="${3:?}"
-API_URL="http://127.0.0.1:54321"
+API_URL="${4:?}"
 
 JWT=$(curl -s -X POST "$API_URL/auth/v1/token?grant_type=password" \
   -H "apikey: $ANON_KEY" -H "Content-Type: application/json" \
@@ -1721,11 +1891,17 @@ echo "$BODY" | grep -q "perfil_id" || { echo "FAIL: response missing perfil_id";
 echo "PASS"
 ```
 
-- [ ] **Step 3: Run it (with functions still being served from Task 11 Step 4)**
+- [ ] **Step 3: Deploy the function and run the test**
+
+```bash
+npx supabase functions deploy criar-conta --use-api
+```
+
+Then, with `SUPABASE_URL` and `SUPABASE_ANON_KEY` from `supabase/.env.local`:
 
 ```bash
 chmod +x supabase/tests/functions/test_criar_conta.sh
-./supabase/tests/functions/test_criar_conta.sh admin.teste@local.test senha-teste-123 <paste local anon key>
+./supabase/tests/functions/test_criar_conta.sh admin.teste@local.test senha-teste-123 <SUPABASE_ANON_KEY value> <SUPABASE_URL value>
 ```
 Expected: `PASS`.
 
@@ -1738,55 +1914,61 @@ git commit -m "feat: criar-conta Edge Function"
 
 ---
 
-## Task 13: Full local regression pass
+## Task 13: Full regression pass against the cloud project
 
-**Files:** none created — verification only.
+**Files:**
+- Create: `supabase/README.md`
 
-- [ ] **Step 1: Reset the database from scratch**
+There is no `db reset` in this plan's cloud workflow (Global Constraints) — every migration from Tasks 2–9 is already applied, permanently, to the linked project. "Full regression" here means: re-run every existing test file against the current live schema (each wraps its assertions in `begin; ... rollback;`, so re-running is safe and non-destructive — see Task 2), and re-verify both deployed Edge Functions without recreating accounts that already exist from Tasks 10–12 (recreating them would fail on a duplicate email, since nothing was reset).
 
-```bash
-npx supabase db reset
-```
-Expected: all 9 migrations apply cleanly in order, `seed.sql` runs without error (it will be empty at this point — that's fine).
+- [ ] **Step 1: Re-run the full pgTAP suite**
 
-- [ ] **Step 2: Run the full pgTAP suite**
+Run each test file in order and confirm every one prints `RESULT: PASS`:
 
 ```bash
-npx supabase test db
+node scripts/run_sql.mjs supabase/tests/database/000_smoke_test.sql
+node scripts/run_sql.mjs supabase/tests/database/010_organizacoes_perfis.sql
+node scripts/run_sql.mjs supabase/tests/database/020_device_tokens.sql
+node scripts/run_sql.mjs supabase/tests/database/030_tipos_processo_fases.sql
+node scripts/run_sql.mjs supabase/tests/database/040_processos.sql
+node scripts/run_sql.mjs supabase/tests/database/050_itens_historico.sql
+node scripts/run_sql.mjs supabase/tests/database/060_diligencias_observacoes.sql
+node scripts/run_sql.mjs supabase/tests/database/070_designacoes.sql
 ```
-Expected: every test file from Tasks 2–9 passes, 0 failures.
+Expected: all 8 print `RESULT: PASS` and exit 0. If any fails, treat it as a real regression — a later task's migration broke an earlier task's RLS/schema assumption — and fix the schema before continuing, not the test.
 
-- [ ] **Step 3: Re-run the bootstrap script and both Edge Function tests end to end**
+- [ ] **Step 2: Smoke-test both deployed Edge Functions**
+
+Task 11/12's test scripts (`test_criar_organizacao.sh`, `test_criar_conta.sh`) hardcode fixed admin/user emails that already exist in the cloud project from when those tasks first ran them successfully. Re-running the same scripts now is still a valid smoke test — it confirms the deployed functions are still reachable and still enforcing the same checks — but expect a duplicate-email failure this time instead of the original `PASS`, since nothing was reset in between:
 
 ```bash
-SUPABASE_SERVICE_ROLE_KEY=<local service_role key> node scripts/bootstrap_super_admin.mjs super@local.test senha-teste-123 "Super Admin Local"
-npx supabase functions serve --env-file supabase/.env.local &
-sleep 3
-./supabase/tests/functions/test_criar_organizacao.sh super@local.test senha-teste-123 <local anon key>
-./supabase/tests/functions/test_criar_conta.sh admin.teste@local.test senha-teste-123 <local anon key>
+./supabase/tests/functions/test_criar_organizacao.sh super@local.test senha-teste-123 <SUPABASE_ANON_KEY value> <SUPABASE_URL value>
+./supabase/tests/functions/test_criar_conta.sh admin.teste@local.test senha-teste-123 <SUPABASE_ANON_KEY value> <SUPABASE_URL value>
 ```
-Expected: both print `PASS`. Stop the `functions serve` background process afterward.
+Expected: both calls reach the function and return a clean, well-formed JSON error whose message indicates the email already exists (proving the function is up, authenticating the caller, and enforcing its checks correctly) — a `PASS` on either script here would mean its hardcoded email was somehow available again, e.g. after a manual cleanup, and is equally fine. The actual regression signal is a timeout, a 5xx, or an unreachable-host error — any of those means investigate before continuing, not just note it and move on.
 
-- [ ] **Step 4: Record the local connection details for Plan 2**
+- [ ] **Step 3: Record the cloud connection details for Plan 2**
 
-Run `npx supabase status` and copy the `API URL` and `anon key` into a new `supabase/README.md`:
+Create `supabase/README.md` (values from `supabase/.env.local` — do not paste real secret values into this committed file, only the variable names and the commands that read them):
 
 ```markdown
-# Local Supabase backend
+# Supabase backend (cloud project)
 
-Start: `npx supabase start`
-Status/credentials: `npx supabase status`
-Reset + reapply migrations + seed: `npx supabase db reset`
-Run database tests: `npx supabase test db`
-Serve Edge Functions locally: `npx supabase functions serve --env-file supabase/.env.local`
+This backend targets a real cloud Supabase project — there is no local Docker
+stack. All commands read credentials from `supabase/.env.local` (gitignored,
+never committed).
 
-Plan 2 (Android data layer) connects the app to the `API URL` and `anon key`
-printed by `npx supabase status` for local development.
+Run a migration or test file: `node scripts/run_sql.mjs <path-to-sql-file>`
+Bootstrap a super_admin account: `node scripts/bootstrap_super_admin.mjs <email> <senha> [nome]`
+Deploy an Edge Function: `npx supabase functions deploy <name> --use-api`
+
+Plan 2 (Android data layer) connects the app to the `SUPABASE_URL` and
+`SUPABASE_ANON_KEY` values in `supabase/.env.local`.
 ```
 
-- [ ] **Step 5: Commit**
+- [ ] **Step 4: Commit**
 
 ```bash
 git add supabase/README.md
-git commit -m "docs: local Supabase backend usage notes"
+git commit -m "docs: cloud Supabase backend usage notes"
 ```
