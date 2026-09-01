@@ -1,5 +1,5 @@
 begin;
-select plan(9);
+select plan(10);
 
 select has_table('public', 'itens', 'itens table should exist');
 select has_table('public', 'processo_fase_historico', 'processo_fase_historico table should exist');
@@ -75,6 +75,18 @@ select throws_ok(
   '42501',
   null,
   'A colleague in the same organization cannot insert an item into a processo they do not own'
+);
+
+-- Same standard applied to processo_fase_historico: the org-wide select
+-- policy above does not relax INSERT, so the WITH CHECK clause of
+-- "processo_fase_historico_acesso" must still reject a non-owner, non-admin
+-- colleague's attempt to add a historico entry.
+select throws_ok(
+  $$insert into public.processo_fase_historico (processo_id, fase_id, data_entrada, observacoes, notificar_prazo)
+    values ('40000000-0000-0000-0000-000000000001', '20000000-0000-0000-0000-000000000001', current_date, '', false)$$,
+  '42501',
+  null,
+  'A colleague in the same organization cannot insert a historico entry into a processo they do not own'
 );
 reset role;
 
