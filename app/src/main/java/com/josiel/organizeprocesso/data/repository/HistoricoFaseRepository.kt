@@ -4,6 +4,7 @@ import com.josiel.organizeprocesso.data.local.AppDatabase
 import com.josiel.organizeprocesso.data.local.ObservacaoVersaoEntity
 import com.josiel.organizeprocesso.data.local.ProcessoEntity
 import com.josiel.organizeprocesso.data.local.ProcessoFaseHistoricoEntity
+import com.josiel.organizeprocesso.data.remote.dto.ProcessoDto
 import com.josiel.organizeprocesso.data.remote.dto.ProcessoFaseHistoricoDto
 import com.josiel.organizeprocesso.data.remote.dto.paraEntity
 import io.github.jan.supabase.SupabaseClient
@@ -32,11 +33,43 @@ class HistoricoFaseRepository(
     fun observarVersoesObservacao(historicoId: String): Flow<List<ObservacaoVersaoEntity>> =
         observacaoVersaoDao.observarPorHistorico(historicoId)
 
-    private suspend fun sincronizarHistorico(processoId: String) {
+    /**
+     * Puxa o histórico de UM processo (usado ao abrir Detalhe/Avançar Fase e
+     * depois de cada escrita). Público porque o cache local é destrutivo entre
+     * versões do Room: sem esta chamada preguiçosa ao abrir a tela, a tabela
+     * fica vazia para sempre e a tela de diligências nunca habilita.
+     */
+    suspend fun sincronizar(processoId: String) {
         val dtos = client.postgrest["processo_fase_historico"].select {
             filter { eq("processo_id", processoId) }
         }.decodeList<ProcessoFaseHistoricoDto>()
         dtos.forEach { historicoDao.upsert(it.paraEntity()) }
+    }
+
+    /**
+     * Puxa a tabela inteira (a RLS já limita à organização do usuário) — mesmo
+     * padrão "org pequena, tabela pequena" de `ProcessoRepository.sincronizar()`.
+     * Necessário no sync pós-login porque o semáforo de fase da LISTA precisa do
+     * histórico de todos os processos, não só do que está aberto na tela.
+     * Depende de `processos`/`fases`/`perfis` já sincronizados (FKs do Room).
+     */
+    suspend fun sincronizarTodos() {
+        val dtos = client.postgrest["processo_fase_historico"].select()
+            .decodeList<ProcessoFaseHistoricoDto>()
+        dtos.forEach { historicoDao.upsert(it.paraEntity()) }
+    }
+
+    /**
+     * Relê a linha do processo no servidor. Depois de `avancar_fase()` o
+     * servidor recalcula `fase_atual_id`/`atualizado_em`; adivinhar o novo
+     * estado localmente deixaria o cache divergente (mesma reconciliação pós-
+     * escrita que todos os outros repositórios já fazem).
+     */
+    private suspend fun sincronizarProcesso(processoId: String) {
+        val dto = client.postgrest["processos"].select {
+            filter { eq("id", processoId) }
+        }.decodeSingle<ProcessoDto>()
+        processoDao.upsert(dto.paraEntity())
     }
 
     /** Atualiza responsável/prazo/notificação/observação da entrada corrente, sem trocar de fase. */
@@ -64,7 +97,7 @@ class HistoricoFaseRepository(
             }
             client.postgrest["observacao_versoes"].insert(linhaVersao)
         }
-        sincronizarHistorico(historico.processoId)
+        sincronizar(historico.processoId)
     }
 
     /**
@@ -95,7 +128,9 @@ class HistoricoFaseRepository(
                 put("p_motivo_retorno", motivoRetorno)
             }
         )
-        processoDao.upsert(processo.copy(faseAtualId = faseDestinoId))
-        sincronizarHistorico(processo.id)
+        // Relê do servidor em vez de adivinhar `faseAtualId` localmente: a RPC
+        // também bumpa `atualizado_em` e pode derivar outros campos.
+        sincronizarProcesso(processo.id)
+        sincronizar(processo.id)
     }
 }

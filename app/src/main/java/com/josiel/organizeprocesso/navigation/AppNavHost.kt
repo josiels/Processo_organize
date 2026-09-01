@@ -24,6 +24,7 @@ import com.josiel.organizeprocesso.data.remote.RealtimeSyncManager
 import com.josiel.organizeprocesso.data.remote.RepositoriosSincronizaveis
 import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
 import com.josiel.organizeprocesso.data.repository.FaseRepository
+import com.josiel.organizeprocesso.data.repository.HistoricoFaseRepository
 import com.josiel.organizeprocesso.data.repository.PerfilRepository
 import com.josiel.organizeprocesso.data.repository.ProcessoRepository
 import com.josiel.organizeprocesso.data.repository.TipoProcessoRepository
@@ -63,11 +64,29 @@ fun AppNavHost() {
     val tipoProcessoRepository = remember { TipoProcessoRepository(database.tipoProcessoDao(), SupabaseSessionManager.client) }
     val faseRepository = remember { FaseRepository(database.faseDao(), SupabaseSessionManager.client) }
     val processoRepository = remember { ProcessoRepository(database, SupabaseSessionManager.client) }
+    val historicoFaseRepository = remember { HistoricoFaseRepository(database, SupabaseSessionManager.client) }
     var sincronizacaoIniciada by remember { mutableStateOf(false) }
 
     LaunchedEffect(sessionStatus) {
         val autenticado = sessionStatus is SessionStatus.Authenticated
         val emLogin = currentDestination?.hierarchy?.any { it.hasRoute(Login::class) } == true
+
+        // Antes de navegar para fora do Login: num cold start com sessão
+        // persistida o Auth restaura sozinho, sem passar por login(), e os
+        // gates de permissão leem o perfil de forma síncrona na construção dos
+        // ViewModels. Sem isto todo admin que reabre o app vira somente-leitura.
+        if (autenticado && SupabaseSessionManager.perfilAtual.value == null) {
+            try {
+                SupabaseSessionManager.carregarPerfilAtual()
+            } catch (e: Exception) {
+                if (e is CancellationException) {
+                    throw e
+                }
+                // Sem rede: segue para o app (em modo restrito); a próxima
+                // transição de sessão tenta carregar de novo.
+            }
+        }
+
         if (autenticado && emLogin) {
             navController.navigate(Inicio) { popUpTo(Login) { inclusive = true } }
         } else if (!autenticado && !emLogin) {
@@ -81,6 +100,11 @@ fun AppNavHost() {
                 tipoProcessoRepository.sincronizar()
                 faseRepository.sincronizar()
                 processoRepository.sincronizar()
+                // Depois de processos/fases/perfis (FKs do Room). O semáforo de
+                // fase da lista precisa do histórico ativo de TODOS os processos,
+                // então aqui é pull da tabela inteira; as demais tabelas por
+                // processo (itens/diligências) sincronizam ao abrir a tela.
+                historicoFaseRepository.sincronizarTodos()
                 RealtimeSyncManager.iniciar(
                     client = SupabaseSessionManager.client,
                     escopo = coroutineScope,
@@ -88,7 +112,14 @@ fun AppNavHost() {
                         perfis = perfilRepository::sincronizar,
                         tiposProcesso = tipoProcessoRepository::sincronizar,
                         fases = faseRepository::sincronizar,
-                        processos = processoRepository::sincronizar
+                        // Toda mudança de fase também escreve em `processos`
+                        // (fase_atual_id), então este canal é o gatilho para
+                        // manter o semáforo de fase da lista fresco — a tabela
+                        // `processo_fase_historico` não tem canal próprio.
+                        processos = {
+                            processoRepository.sincronizar()
+                            historicoFaseRepository.sincronizarTodos()
+                        }
                     )
                 )
             } catch (e: Exception) {
