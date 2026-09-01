@@ -1,6 +1,7 @@
 package com.josiel.organizeprocesso.data.local
 
 import androidx.room.TypeConverter
+import com.josiel.organizeprocesso.domain.model.Papel
 import com.josiel.organizeprocesso.domain.model.StatusGeralProcesso
 import com.josiel.organizeprocesso.domain.model.TipoAnexo
 import java.time.Instant
@@ -30,4 +31,10 @@ class Converters {
 
     @TypeConverter
     fun toTipoAnexo(value: String?): TipoAnexo? = value?.let(TipoAnexo::valueOf)
+
+    @TypeConverter
+    fun fromPapel(value: Papel?): String? = value?.name
+
+    @TypeConverter
+    fun toPapel(value: String?): Papel? = value?.let(Papel::valueOf)
 }

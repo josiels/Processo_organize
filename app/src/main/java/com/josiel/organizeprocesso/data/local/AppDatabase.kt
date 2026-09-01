@@ -8,7 +8,8 @@ import androidx.room.TypeConverters
 
 @Database(
     entities = [
-        PessoaEntity::class,
+        PerfilEntity::class,
+        TipoProcessoEntity::class,
         FaseEntity::class,
         ProcessoEntity::class,
         ProcessoFaseHistoricoEntity::class,
@@ -16,12 +17,13 @@ import androidx.room.TypeConverters
         ItemEntity::class,
         AnexoLinkEntity::class
     ],
-    version = 1,
+    version = 2,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
 abstract class AppDatabase : RoomDatabase() {
-    abstract fun pessoaDao(): PessoaDao
+    abstract fun perfilDao(): PerfilDao
+    abstract fun tipoProcessoDao(): TipoProcessoDao
     abstract fun faseDao(): FaseDao
     abstract fun processoDao(): ProcessoDao
     abstract fun processoFaseHistoricoDao(): ProcessoFaseHistoricoDao
@@ -39,7 +41,10 @@ abstract class AppDatabase : RoomDatabase() {
                     context.applicationContext,
                     AppDatabase::class.java,
                     "organize_processo.db"
-                ).build().also { instancia = it }
+                )
+                    .fallbackToDestructiveMigration(dropAllTables = true)
+                    .build()
+                    .also { instancia = it }
             }
     }
 }

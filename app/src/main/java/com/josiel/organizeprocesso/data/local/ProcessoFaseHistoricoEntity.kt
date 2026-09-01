@@ -4,14 +4,14 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import java.time.Instant
 import java.time.LocalDate
 
 /**
  * ARQUITETURA.md, seção 4 — ProcessoFaseHistorico (núcleo do histórico de
  * fases). `dataSaida == null` marca a fase corrente/ativa do processo.
- * `observacoes` guarda o conteúdo atual; o histórico versionado vive em
- * [ObservacaoVersaoEntity].
+ * `responsavelId` aqui é "quem executou esta passagem específica pela fase"
+ * — um conceito DIFERENTE de `ProcessoEntity.responsavelId` (a designação
+ * corrente do processo inteiro). Ver spec do Plano 2A, seção 2.3.
  */
 @Entity(
     tableName = "processo_fase_historico",
@@ -29,7 +29,7 @@ import java.time.LocalDate
             onDelete = ForeignKey.NO_ACTION
         ),
         ForeignKey(
-            entity = PessoaEntity::class,
+            entity = PerfilEntity::class,
             parentColumns = ["id"],
             childColumns = ["responsavelId"],
             onDelete = ForeignKey.SET_NULL
@@ -47,8 +47,5 @@ data class ProcessoFaseHistoricoEntity(
     val prazoLimite: LocalDate?,
     val observacoes: String,
     val motivoRetorno: String?,
-    val notificarPrazo: Boolean,
-    val updatedAt: Instant,
-    val synced: Boolean,
-    val deviceOrigin: String
+    val notificarPrazo: Boolean
 )

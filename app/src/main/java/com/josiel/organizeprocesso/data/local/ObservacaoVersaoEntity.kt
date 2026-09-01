@@ -28,7 +28,5 @@ data class ObservacaoVersaoEntity(
     @PrimaryKey val id: String,
     val processoFaseHistoricoId: String,
     val conteudo: String,
-    val criadoEm: Instant,
-    val deviceOrigin: String,
-    val synced: Boolean
+    val criadoEm: Instant
 )

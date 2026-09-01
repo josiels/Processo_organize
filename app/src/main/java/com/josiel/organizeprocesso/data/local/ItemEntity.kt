@@ -4,7 +4,6 @@ import androidx.room.Entity
 import androidx.room.ForeignKey
 import androidx.room.Index
 import androidx.room.PrimaryKey
-import java.time.Instant
 
 /**
  * ARQUITETURA.md, seção 4 — Item (1:N com Processo).
@@ -31,8 +30,5 @@ data class ItemEntity(
     val quantidade: Double,
     val unidade: String,
     val valorEstimadoUnit: Double,
-    val valorPesquisaUnit: Double?,
-    val updatedAt: Instant,
-    val synced: Boolean,
-    val deviceOrigin: String
+    val valorPesquisaUnit: Double?
 )
