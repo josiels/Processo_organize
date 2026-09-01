@@ -37,6 +37,7 @@ import com.josiel.organizeprocesso.ui.processos.AvancarFaseScreen
 import com.josiel.organizeprocesso.ui.processos.ProcessoDetalheScreen
 import com.josiel.organizeprocesso.ui.processos.ProcessoFormScreen
 import com.josiel.organizeprocesso.ui.processos.ProcessosScreen
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -74,20 +75,27 @@ fun AppNavHost() {
 
         if (autenticado && !sincronizacaoIniciada) {
             sincronizacaoIniciada = true
-            perfilRepository.sincronizar()
-            tipoProcessoRepository.sincronizar()
-            faseRepository.sincronizar()
-            processoRepository.sincronizar()
-            RealtimeSyncManager.iniciar(
-                client = SupabaseSessionManager.client,
-                escopo = coroutineScope,
-                repositorios = RepositoriosSincronizaveis(
-                    perfis = perfilRepository::sincronizar,
-                    tiposProcesso = tipoProcessoRepository::sincronizar,
-                    fases = faseRepository::sincronizar,
-                    processos = processoRepository::sincronizar
+            try {
+                perfilRepository.sincronizar()
+                tipoProcessoRepository.sincronizar()
+                faseRepository.sincronizar()
+                processoRepository.sincronizar()
+                RealtimeSyncManager.iniciar(
+                    client = SupabaseSessionManager.client,
+                    escopo = coroutineScope,
+                    repositorios = RepositoriosSincronizaveis(
+                        perfis = perfilRepository::sincronizar,
+                        tiposProcesso = tipoProcessoRepository::sincronizar,
+                        fases = faseRepository::sincronizar,
+                        processos = processoRepository::sincronizar
+                    )
                 )
-            )
+            } catch (e: Exception) {
+                if (e is CancellationException) {
+                    throw e
+                }
+                sincronizacaoIniciada = false
+            }
         } else if (!autenticado) {
             sincronizacaoIniciada = false
         }
