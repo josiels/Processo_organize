@@ -14,6 +14,7 @@ import com.josiel.organizeprocesso.data.repository.HistoricoFaseRepository
 import com.josiel.organizeprocesso.data.repository.PerfilRepository
 import com.josiel.organizeprocesso.data.repository.ProcessoRepository
 import com.josiel.organizeprocesso.domain.model.StatusSemaforo
+import com.josiel.organizeprocesso.domain.usecase.calcularSemaforo
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -67,12 +68,8 @@ class AvancarFaseViewModel(
             ) { processo, historico, fases, perfis ->
                 val faseAtual = processo?.let { p -> fases.find { it.id == p.faseAtualId } }
                 val diasParado = historico?.let { ChronoUnit.DAYS.between(it.dataEntrada, LocalDate.now()) } ?: 0L
-                val semaforo = when {
-                    faseAtual == null -> StatusSemaforo.OK
-                    diasParado >= faseAtual.diasAlertaCritico -> StatusSemaforo.CRITICO
-                    diasParado >= faseAtual.diasAlertaAtencao -> StatusSemaforo.ATENCAO
-                    else -> StatusSemaforo.OK
-                }
+                val semaforo = faseAtual?.let { calcularSemaforo(diasParado, it.diasAlertaAtencao, it.diasAlertaCritico) }
+                    ?: StatusSemaforo.OK
                 Quintuplo(processo, faseAtual, historico, semaforo, fases to perfis)
             }.collect { (processo, faseAtual, historico, semaforo, fasesPessoas) ->
                 val estadoAtual = _uiState.value

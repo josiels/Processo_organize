@@ -10,6 +10,7 @@ import com.josiel.organizeprocesso.data.repository.FaseRepository
 import com.josiel.organizeprocesso.data.repository.PerfilRepository
 import com.josiel.organizeprocesso.data.repository.ProcessoRepository
 import com.josiel.organizeprocesso.domain.model.StatusSemaforo
+import com.josiel.organizeprocesso.domain.usecase.calcularSemaforo
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
 import kotlinx.coroutines.flow.SharingStarted
@@ -50,12 +51,8 @@ class ProcessoListViewModel(application: Application) : AndroidViewModel(applica
             val historico = historicoPorProcesso[processo.id]
             val fase = faseMap[processo.faseAtualId]
             val diasParado = historico?.let { ChronoUnit.DAYS.between(it.dataEntrada, hoje) } ?: 0L
-            val statusSemaforo = when {
-                fase == null -> StatusSemaforo.OK
-                diasParado >= fase.diasAlertaCritico -> StatusSemaforo.CRITICO
-                diasParado >= fase.diasAlertaAtencao -> StatusSemaforo.ATENCAO
-                else -> StatusSemaforo.OK
-            }
+            val statusSemaforo = fase?.let { calcularSemaforo(diasParado, it.diasAlertaAtencao, it.diasAlertaCritico) }
+                ?: StatusSemaforo.OK
             ProcessoListItem(
                 processo = processo,
                 faseNome = fase?.nome ?: "—",
