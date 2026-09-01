@@ -16,12 +16,14 @@ import com.josiel.organizeprocesso.ui.theme.VerdeOk
 fun AppToggle(
     checked: Boolean,
     onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     Switch(
         checked = checked,
         onCheckedChange = onCheckedChange,
         modifier = modifier,
+        enabled = enabled,
         colors = SwitchDefaults.colors(
             checkedTrackColor = VerdeOk,
             checkedThumbColor = MaterialTheme.colorScheme.surface,

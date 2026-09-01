@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.wrapContentSize
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -20,6 +21,7 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -44,6 +46,7 @@ import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
+import com.josiel.organizeprocesso.data.local.DiligenciaEntity
 import com.josiel.organizeprocesso.data.local.FaseEntity
 import com.josiel.organizeprocesso.data.local.PerfilEntity
 import com.josiel.organizeprocesso.ui.components.AppToggle
@@ -55,7 +58,7 @@ import com.josiel.organizeprocesso.ui.theme.Orange800
 import com.josiel.organizeprocesso.ui.theme.OrangePastel
 import com.josiel.organizeprocesso.ui.theme.VerdeOk
 import com.josiel.organizeprocesso.ui.theme.VerdeOkPastel
-import java.time.LocalDate
+import java.time.format.DateTimeFormatter
 
 /** Tela de ação central: avançar/retroceder fase (REQUISITOS.md, seção 9; DESIGN.md, seção 5; ROADMAP.md, passo 9). */
 @OptIn(ExperimentalMaterial3Api::class)
@@ -72,7 +75,9 @@ fun AvancarFaseScreen(
         }
     )
     val estado by viewModel.uiState.collectAsState()
+    val diligencias by viewModel.diligencias.collectAsState()
     var dialogoFase by remember { mutableStateOf<TipoMudancaFase?>(null) }
+    var mostrarDialogoDiligencia by remember { mutableStateOf(false) }
 
     Scaffold(
         modifier = modifier,
@@ -87,7 +92,7 @@ fun AvancarFaseScreen(
                 },
                 actions = {
                     IconButton(
-                        enabled = estado.historicoAtual != null,
+                        enabled = estado.historicoAtual != null && estado.podeEditar,
                         onClick = { viewModel.salvarEntradaAtual() }
                     ) {
                         Icon(Icons.Filled.Check, contentDescription = "Salvar")
@@ -114,6 +119,13 @@ fun AvancarFaseScreen(
         ) {
             Text(estado.faseAtual?.nome ?: "—", style = MaterialTheme.typography.headlineSmall)
             SemaforoPill(status = estado.statusSemaforo)
+            if (!estado.podeEditar) {
+                Text(
+                    "Somente leitura — você não pode editar esta fase.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {
                 TextButton(onClick = onBackClick, modifier = Modifier.weight(1f)) {
@@ -128,6 +140,7 @@ fun AvancarFaseScreen(
                 OutlinedTextField(
                     value = estado.observacao,
                     onValueChange = viewModel::atualizarObservacao,
+                    enabled = estado.podeEditar,
                     label = { Text("Observação") },
                     placeholder = { Text("Adicionar uma observação sobre esta fase...") },
                     modifier = Modifier.fillMaxWidth().height(140.dp)
@@ -142,11 +155,12 @@ fun AvancarFaseScreen(
             }
 
             DropdownField(
-                label = "Responsável",
-                opcoes = estado.pessoas.filter { it.ativo },
-                selecionado = estado.pessoas.find { it.id == estado.responsavelId },
+                label = "Executor desta passagem",
+                opcoes = estado.perfis.filter { it.ativo },
+                selecionado = estado.perfis.find { it.id == estado.executorId },
                 rotulo = PerfilEntity::nome,
-                onSelecionado = { viewModel.atualizarResponsavel(it.id) },
+                onSelecionado = { viewModel.atualizarExecutor(it.id) },
+                enabled = estado.podeEditar,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -155,6 +169,7 @@ fun AvancarFaseScreen(
                 data = estado.prazoLimite,
                 onDataSelecionada = viewModel::atualizarPrazoLimite,
                 onLimpar = { viewModel.atualizarPrazoLimite(null) },
+                enabled = estado.podeEditar,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -164,24 +179,60 @@ fun AvancarFaseScreen(
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text("Notificar sobre prazo desta fase?")
-                AppToggle(checked = estado.notificarPrazo, onCheckedChange = viewModel::atualizarNotificarPrazo)
+                AppToggle(
+                    checked = estado.notificarPrazo,
+                    onCheckedChange = viewModel::atualizarNotificarPrazo,
+                    enabled = estado.podeEditar
+                )
             }
 
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
-                PillButton(
-                    text = "Avançar fase",
-                    onClick = { dialogoFase = TipoMudancaFase.AVANCAR },
-                    containerColor = VerdeOkPastel,
-                    contentColor = VerdeOk,
-                    modifier = Modifier.weight(1f)
+            HorizontalDivider(modifier = Modifier.padding(vertical = 4.dp))
+            Text("Diligências", style = MaterialTheme.typography.titleMedium)
+            if (diligencias.isEmpty()) {
+                Text(
+                    "Nenhuma diligência registrada nesta fase ainda.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            } else {
+                diligencias.forEach { diligencia ->
+                    Column(modifier = Modifier.padding(vertical = 4.dp)) {
+                        Text(diligencia.conteudo, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            formatoDataHora.format(diligencia.criadoEm.atZone(java.time.ZoneId.systemDefault())),
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+            if (estado.podeEditar) {
                 PillButton(
-                    text = "Retornar fase",
-                    onClick = { dialogoFase = TipoMudancaFase.RETORNAR },
-                    containerColor = OrangePastel,
-                    contentColor = Orange800,
-                    modifier = Modifier.weight(1f)
+                    text = "Registrar diligência",
+                    onClick = { mostrarDialogoDiligencia = true },
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.wrapContentSize()
                 )
+            }
+
+            if (estado.podeEditar) {
+                Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) {
+                    PillButton(
+                        text = "Avançar fase",
+                        onClick = { dialogoFase = TipoMudancaFase.AVANCAR },
+                        containerColor = VerdeOkPastel,
+                        contentColor = VerdeOk,
+                        modifier = Modifier.weight(1f)
+                    )
+                    PillButton(
+                        text = "Retornar fase",
+                        onClick = { dialogoFase = TipoMudancaFase.RETORNAR },
+                        containerColor = OrangePastel,
+                        contentColor = Orange800,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
             }
         }
     }
@@ -191,11 +242,21 @@ fun AvancarFaseScreen(
             tipo = tipo,
             fases = estado.fases.filter { it.id != estado.faseAtual?.id },
             onDismiss = { dialogoFase = null },
-            onConfirmar = { faseDestino, dataEntrada, motivo ->
-                viewModel.mudarFase(faseDestino.id, dataEntrada, motivo) {
+            onConfirmar = { faseDestino, motivo ->
+                viewModel.mudarFase(faseDestino.id, motivo) {
                     dialogoFase = null
                     onBackClick()
                 }
+            }
+        )
+    }
+
+    if (mostrarDialogoDiligencia) {
+        RegistrarDiligenciaDialog(
+            onDismiss = { mostrarDialogoDiligencia = false },
+            onConfirmar = { conteudo ->
+                viewModel.registrarDiligencia(conteudo)
+                mostrarDialogoDiligencia = false
             }
         )
     }
@@ -209,10 +270,9 @@ private fun FaseDestinoDialog(
     tipo: TipoMudancaFase,
     fases: List<FaseEntity>,
     onDismiss: () -> Unit,
-    onConfirmar: (fase: FaseEntity, dataEntrada: LocalDate, motivo: String?) -> Unit
+    onConfirmar: (fase: FaseEntity, motivo: String?) -> Unit
 ) {
     var faseSelecionada by remember { mutableStateOf<FaseEntity?>(null) }
-    var dataEntrada by remember { mutableStateOf(LocalDate.now()) }
     var motivo by remember { mutableStateOf("") }
     val ehRetorno = tipo == TipoMudancaFase.RETORNAR
 
@@ -254,12 +314,6 @@ private fun FaseDestinoDialog(
                         }
                     }
                 }
-                DateField(
-                    label = "Data de entrada",
-                    data = dataEntrada,
-                    onDataSelecionada = { dataEntrada = it },
-                    modifier = Modifier.fillMaxWidth()
-                )
                 if (ehRetorno) {
                     OutlinedTextField(
                         value = motivo,
@@ -274,9 +328,40 @@ private fun FaseDestinoDialog(
             TextButton(
                 enabled = faseSelecionada != null && (!ehRetorno || motivo.isNotBlank()),
                 onClick = {
-                    faseSelecionada?.let { onConfirmar(it, dataEntrada, if (ehRetorno) motivo else null) }
+                    faseSelecionada?.let { onConfirmar(it, if (ehRetorno) motivo else null) }
                 }
             ) { Text("Confirmar") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
+}
+
+private val formatoDataHora = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
+
+@Composable
+private fun RegistrarDiligenciaDialog(
+    onDismiss: () -> Unit,
+    onConfirmar: (String) -> Unit
+) {
+    var texto by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Registrar diligência") },
+        text = {
+            OutlinedTextField(
+                value = texto,
+                onValueChange = { texto = it },
+                label = { Text("O que aconteceu?") },
+                modifier = Modifier.fillMaxWidth()
+            )
+        },
+        confirmButton = {
+            TextButton(
+                enabled = texto.isNotBlank(),
+                onClick = { onConfirmar(texto.trim()) }
+            ) { Text("Registrar") }
         },
         dismissButton = {
             TextButton(onClick = onDismiss) { Text("Cancelar") }
