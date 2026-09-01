@@ -45,7 +45,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.josiel.organizeprocesso.data.local.FaseEntity
-import com.josiel.organizeprocesso.data.local.PessoaEntity
+import com.josiel.organizeprocesso.data.local.PerfilEntity
 import com.josiel.organizeprocesso.ui.components.AppToggle
 import com.josiel.organizeprocesso.ui.components.DateField
 import com.josiel.organizeprocesso.ui.components.DropdownField
@@ -145,7 +145,7 @@ fun AvancarFaseScreen(
                 label = "Responsável",
                 opcoes = estado.pessoas.filter { it.ativo },
                 selecionado = estado.pessoas.find { it.id == estado.responsavelId },
-                rotulo = PessoaEntity::nome,
+                rotulo = PerfilEntity::nome,
                 onSelecionado = { viewModel.atualizarResponsavel(it.id) },
                 modifier = Modifier.fillMaxWidth()
             )

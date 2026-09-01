@@ -5,14 +5,14 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.josiel.organizeprocesso.data.local.AppDatabase
 import com.josiel.organizeprocesso.data.local.FaseEntity
-import com.josiel.organizeprocesso.data.local.PessoaEntity
+import com.josiel.organizeprocesso.data.local.PerfilEntity
 import com.josiel.organizeprocesso.data.local.ProcessoEntity
 import com.josiel.organizeprocesso.data.local.ProcessoFaseHistoricoEntity
+import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
 import com.josiel.organizeprocesso.data.repository.FaseRepository
 import com.josiel.organizeprocesso.data.repository.HistoricoFaseRepository
-import com.josiel.organizeprocesso.data.repository.PessoaRepository
+import com.josiel.organizeprocesso.data.repository.PerfilRepository
 import com.josiel.organizeprocesso.data.repository.ProcessoRepository
-import com.josiel.organizeprocesso.data.util.DeviceId
 import com.josiel.organizeprocesso.domain.model.StatusSemaforo
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -33,7 +33,7 @@ data class AvancarFaseUiState(
     val historicoAtual: ProcessoFaseHistoricoEntity? = null,
     val statusSemaforo: StatusSemaforo = StatusSemaforo.OK,
     val fases: List<FaseEntity> = emptyList(),
-    val pessoas: List<PessoaEntity> = emptyList(),
+    val pessoas: List<PerfilEntity> = emptyList(),
     val observacao: String = "",
     val responsavelId: String? = null,
     val prazoLimite: LocalDate? = null,
@@ -47,11 +47,10 @@ class AvancarFaseViewModel(
 ) : AndroidViewModel(application) {
 
     private val database = AppDatabase.getInstance(application)
-    private val deviceId = DeviceId.obter(application)
-    private val processoRepository = ProcessoRepository(database, deviceId)
-    private val faseRepository = FaseRepository(database.faseDao(), deviceId)
-    private val pessoaRepository = PessoaRepository(database.pessoaDao(), deviceId)
-    private val historicoRepository = HistoricoFaseRepository(database, deviceId)
+    private val processoRepository = ProcessoRepository(database, SupabaseSessionManager.client)
+    private val faseRepository = FaseRepository(database.faseDao(), SupabaseSessionManager.client)
+    private val perfilRepository = PerfilRepository(database.perfilDao(), SupabaseSessionManager.client)
+    private val historicoRepository = HistoricoFaseRepository(database)
 
     private val _uiState = MutableStateFlow(AvancarFaseUiState())
     val uiState: StateFlow<AvancarFaseUiState> = _uiState.asStateFlow()
@@ -64,8 +63,8 @@ class AvancarFaseViewModel(
                 processoRepository.observarPorId(processoId),
                 historicoRepository.observarAtivoPorProcesso(processoId),
                 faseRepository.observarTodas(),
-                pessoaRepository.observarTodas()
-            ) { processo, historico, fases, pessoas ->
+                perfilRepository.observarTodos()
+            ) { processo, historico, fases, perfis ->
                 val faseAtual = processo?.let { p -> fases.find { it.id == p.faseAtualId } }
                 val diasParado = historico?.let { ChronoUnit.DAYS.between(it.dataEntrada, LocalDate.now()) } ?: 0L
                 val semaforo = when {
@@ -74,7 +73,7 @@ class AvancarFaseViewModel(
                     diasParado >= faseAtual.diasAlertaAtencao -> StatusSemaforo.ATENCAO
                     else -> StatusSemaforo.OK
                 }
-                Quintuplo(processo, faseAtual, historico, semaforo, fases to pessoas)
+                Quintuplo(processo, faseAtual, historico, semaforo, fases to perfis)
             }.collect { (processo, faseAtual, historico, semaforo, fasesPessoas) ->
                 val estadoAtual = _uiState.value
                 _uiState.value = estadoAtual.copy(

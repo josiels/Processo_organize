@@ -142,7 +142,7 @@ private fun AbaDadosGerais(estado: ProcessoDetalheUiState, onAvancarFaseClick: (
         CampoDado("Objeto", processo.objeto)
         if (processo.descricao.isNotBlank()) CampoDado("Descrição", processo.descricao)
         CampoDado("Órgão demandante", processo.orgaoDemandante)
-        if (processo.tipo.isNotBlank()) CampoDado("Tipo", processo.tipo)
+        if (processo.tipoProcessoId.isNotBlank()) CampoDado("Tipo", processo.tipoProcessoId)
         CampoDado("Valor estimado total", "R$ %.2f".format(processo.valorEstimadoTotal))
         CampoDado("Data de abertura", processo.dataAbertura.format(formatoData))
 

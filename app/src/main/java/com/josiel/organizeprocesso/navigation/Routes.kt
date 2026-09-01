@@ -15,6 +15,9 @@ object Agenda
 @Serializable
 object Mais
 
+@Serializable
+object Login
+
 // Rotas empilhadas a partir da aba Processos.
 @Serializable
 data class ProcessoDetalhe(val processoId: String)
@@ -29,6 +32,3 @@ data class ProcessoForm(val processoId: String? = null)
 // Rotas empilhadas a partir da aba Mais.
 @Serializable
 object CadastroFases
-
-@Serializable
-object CadastroPessoas

@@ -7,9 +7,9 @@ import com.josiel.organizeprocesso.data.local.AppDatabase
 import com.josiel.organizeprocesso.data.local.FaseEntity
 import com.josiel.organizeprocesso.data.local.ItemEntity
 import com.josiel.organizeprocesso.data.local.ProcessoEntity
+import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
 import com.josiel.organizeprocesso.data.repository.FaseRepository
 import com.josiel.organizeprocesso.data.repository.ProcessoRepository
-import com.josiel.organizeprocesso.data.util.DeviceId
 import com.josiel.organizeprocesso.domain.model.StatusGeralProcesso
 import java.time.LocalDate
 import java.util.UUID
@@ -49,9 +49,8 @@ class ProcessoFormViewModel(
 ) : AndroidViewModel(application) {
 
     private val database = AppDatabase.getInstance(application)
-    private val deviceId = DeviceId.obter(application)
-    private val processoRepository = ProcessoRepository(database, deviceId)
-    private val faseRepository = FaseRepository(database.faseDao(), deviceId)
+    private val processoRepository = ProcessoRepository(database, SupabaseSessionManager.client)
+    private val faseRepository = FaseRepository(database.faseDao(), SupabaseSessionManager.client)
 
     val ehEdicao: Boolean = processoId != null
 
@@ -80,7 +79,7 @@ class ProcessoFormViewModel(
                         objeto = processo.objeto,
                         descricao = processo.descricao,
                         orgaoDemandante = processo.orgaoDemandante,
-                        tipo = processo.tipo,
+                        tipo = processo.tipoProcessoId,
                         dataAbertura = processo.dataAbertura,
                         faseSelecionadaId = processo.faseAtualId,
                         statusGeral = processo.statusGeral,
@@ -143,10 +142,7 @@ class ProcessoFormViewModel(
             quantidade = quantidade,
             unidade = unidade,
             valorEstimadoUnit = valorEstimadoUnit,
-            valorPesquisaUnit = valorPesquisaUnit,
-            updatedAt = java.time.Instant.now(),
-            synced = false,
-            deviceOrigin = deviceId
+            valorPesquisaUnit = valorPesquisaUnit
         )).copy(
             descricao = descricao,
             quantidade = quantidade,
@@ -185,7 +181,7 @@ class ProcessoFormViewModel(
                         objeto = estado.objeto,
                         descricao = estado.descricao,
                         orgaoDemandante = estado.orgaoDemandante,
-                        tipo = estado.tipo,
+                        tipoProcessoId = estado.tipo,
                         dataAbertura = estado.dataAbertura,
                         faseAtualId = faseId,
                         statusGeral = estado.statusGeral
@@ -196,11 +192,12 @@ class ProcessoFormViewModel(
                 original.id
             } else {
                 processoRepository.criar(
+                    organizacaoId = SupabaseSessionManager.perfilAtual?.organizacaoId.orEmpty(),
                     numero = estado.numero,
                     objeto = estado.objeto,
                     descricao = estado.descricao,
                     orgaoDemandante = estado.orgaoDemandante,
-                    tipo = estado.tipo,
+                    tipoProcessoId = estado.tipo,
                     dataAbertura = estado.dataAbertura,
                     faseInicialId = faseId,
                     statusGeral = estado.statusGeral,

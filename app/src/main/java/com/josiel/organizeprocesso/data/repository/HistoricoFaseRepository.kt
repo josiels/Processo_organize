@@ -16,8 +16,7 @@ import kotlinx.coroutines.flow.Flow
  * para uma nova fase (ROADMAP.md, passo 9), que nunca é automática.
  */
 class HistoricoFaseRepository(
-    private val database: AppDatabase,
-    private val deviceId: String
+    private val database: AppDatabase
 ) {
     private val processoDao = database.processoDao()
     private val historicoDao = database.processoFaseHistoricoDao()
@@ -44,10 +43,7 @@ class HistoricoFaseRepository(
                     responsavelId = responsavelId,
                     prazoLimite = prazoLimite,
                     notificarPrazo = notificarPrazo,
-                    observacoes = novaObservacao,
-                    updatedAt = agora,
-                    synced = false,
-                    deviceOrigin = deviceId
+                    observacoes = novaObservacao
                 )
             )
             if (novaObservacao != historico.observacoes) {
@@ -56,9 +52,7 @@ class HistoricoFaseRepository(
                         id = UUID.randomUUID().toString(),
                         processoFaseHistoricoId = historico.id,
                         conteudo = novaObservacao,
-                        criadoEm = agora,
-                        deviceOrigin = deviceId,
-                        synced = false
+                        criadoEm = agora
                     )
                 )
             }
@@ -80,14 +74,10 @@ class HistoricoFaseRepository(
         motivoRetorno: String?,
         notificarPrazo: Boolean
     ) {
-        val agora = Instant.now()
         database.withTransaction {
             historicoDao.upsert(
                 historicoAtual.copy(
-                    dataSaida = dataEntrada,
-                    updatedAt = agora,
-                    synced = false,
-                    deviceOrigin = deviceId
+                    dataSaida = dataEntrada
                 )
             )
             historicoDao.upsert(
@@ -101,14 +91,11 @@ class HistoricoFaseRepository(
                     prazoLimite = prazoLimite,
                     observacoes = "",
                     motivoRetorno = motivoRetorno?.takeIf { it.isNotBlank() },
-                    notificarPrazo = notificarPrazo,
-                    updatedAt = agora,
-                    synced = false,
-                    deviceOrigin = deviceId
+                    notificarPrazo = notificarPrazo
                 )
             )
             processoDao.upsert(
-                processo.copy(faseAtualId = faseDestinoId, updatedAt = agora, synced = false, deviceOrigin = deviceId)
+                processo.copy(faseAtualId = faseDestinoId)
             )
         }
     }

@@ -5,10 +5,10 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.josiel.organizeprocesso.data.local.AppDatabase
 import com.josiel.organizeprocesso.data.local.ProcessoEntity
+import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
 import com.josiel.organizeprocesso.data.repository.FaseRepository
-import com.josiel.organizeprocesso.data.repository.PessoaRepository
+import com.josiel.organizeprocesso.data.repository.PerfilRepository
 import com.josiel.organizeprocesso.data.repository.ProcessoRepository
-import com.josiel.organizeprocesso.data.util.DeviceId
 import com.josiel.organizeprocesso.domain.model.StatusSemaforo
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -30,20 +30,19 @@ data class ProcessoListItem(
 class ProcessoListViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = AppDatabase.getInstance(application)
-    private val deviceId = DeviceId.obter(application)
-    private val processoRepository = ProcessoRepository(database, deviceId)
-    private val faseRepository = FaseRepository(database.faseDao(), deviceId)
-    private val pessoaRepository = PessoaRepository(database.pessoaDao(), deviceId)
+    private val processoRepository = ProcessoRepository(database, SupabaseSessionManager.client)
+    private val faseRepository = FaseRepository(database.faseDao(), SupabaseSessionManager.client)
+    private val perfilRepository = PerfilRepository(database.perfilDao(), SupabaseSessionManager.client)
     private val historicoDao = database.processoFaseHistoricoDao()
 
     val itens: StateFlow<List<ProcessoListItem>> = combine(
         processoRepository.observarTodos(),
         faseRepository.observarTodas(),
-        pessoaRepository.observarTodas(),
+        perfilRepository.observarTodos(),
         historicoDao.observarTodosAtivos()
-    ) { processos, fases, pessoas, historicosAtivos ->
+    ) { processos, fases, perfis, historicosAtivos ->
         val faseMap = fases.associateBy { it.id }
-        val pessoaMap = pessoas.associateBy { it.id }
+        val perfilMap = perfis.associateBy { it.id }
         val historicoPorProcesso = historicosAtivos.associateBy { it.processoId }
         val hoje = LocalDate.now()
 
@@ -60,7 +59,7 @@ class ProcessoListViewModel(application: Application) : AndroidViewModel(applica
             ProcessoListItem(
                 processo = processo,
                 faseNome = fase?.nome ?: "—",
-                responsavelNome = historico?.responsavelId?.let { pessoaMap[it]?.nome },
+                responsavelNome = historico?.responsavelId?.let { perfilMap[it]?.nome },
                 statusSemaforo = statusSemaforo,
                 diasParado = diasParado
             )

@@ -123,8 +123,7 @@ fun FasesScreen(
                     ordem = ordem,
                     descricao = descricao,
                     diasAlertaAtencao = diasAtencao,
-                    diasAlertaCritico = diasCritico,
-                    padrao = faseEmEdicao?.padrao ?: false
+                    diasAlertaCritico = diasCritico
                 )
                 mostrarFormulario = false
             },

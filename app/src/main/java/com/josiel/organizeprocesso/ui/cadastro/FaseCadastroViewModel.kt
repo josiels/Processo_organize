@@ -5,8 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.josiel.organizeprocesso.data.local.AppDatabase
 import com.josiel.organizeprocesso.data.local.FaseEntity
+import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
 import com.josiel.organizeprocesso.data.repository.FaseRepository
-import com.josiel.organizeprocesso.data.util.DeviceId
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.stateIn
@@ -15,7 +15,7 @@ import kotlinx.coroutines.launch
 class FaseCadastroViewModel(application: Application) : AndroidViewModel(application) {
     private val repository = FaseRepository(
         dao = AppDatabase.getInstance(application).faseDao(),
-        deviceId = DeviceId.obter(application)
+        client = SupabaseSessionManager.client
     )
 
     val fases: StateFlow<List<FaseEntity>> = repository.observarTodas()
@@ -27,11 +27,18 @@ class FaseCadastroViewModel(application: Application) : AndroidViewModel(applica
         ordem: Int,
         descricao: String?,
         diasAlertaAtencao: Int,
-        diasAlertaCritico: Int,
-        padrao: Boolean
+        diasAlertaCritico: Int
     ) {
         viewModelScope.launch {
-            repository.salvar(id, nome, ordem, descricao, diasAlertaAtencao, diasAlertaCritico, padrao)
+            repository.salvar(
+                id = id,
+                organizacaoId = SupabaseSessionManager.perfilAtual?.organizacaoId.orEmpty(),
+                nome = nome,
+                ordem = ordem,
+                descricao = descricao,
+                diasAlertaAtencao = diasAlertaAtencao,
+                diasAlertaCritico = diasAlertaCritico
+            )
         }
     }
 

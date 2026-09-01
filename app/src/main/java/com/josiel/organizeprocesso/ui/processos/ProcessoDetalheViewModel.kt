@@ -7,10 +7,10 @@ import com.josiel.organizeprocesso.data.local.AppDatabase
 import com.josiel.organizeprocesso.data.local.ItemEntity
 import com.josiel.organizeprocesso.data.local.ProcessoEntity
 import com.josiel.organizeprocesso.data.local.ProcessoFaseHistoricoEntity
+import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
 import com.josiel.organizeprocesso.data.repository.FaseRepository
-import com.josiel.organizeprocesso.data.repository.PessoaRepository
+import com.josiel.organizeprocesso.data.repository.PerfilRepository
 import com.josiel.organizeprocesso.data.repository.ProcessoRepository
-import com.josiel.organizeprocesso.data.util.DeviceId
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -38,10 +38,9 @@ class ProcessoDetalheViewModel(
 ) : AndroidViewModel(application) {
 
     private val database = AppDatabase.getInstance(application)
-    private val deviceId = DeviceId.obter(application)
-    private val processoRepository = ProcessoRepository(database, deviceId)
-    private val faseRepository = FaseRepository(database.faseDao(), deviceId)
-    private val pessoaRepository = PessoaRepository(database.pessoaDao(), deviceId)
+    private val processoRepository = ProcessoRepository(database, SupabaseSessionManager.client)
+    private val faseRepository = FaseRepository(database.faseDao(), SupabaseSessionManager.client)
+    private val perfilRepository = PerfilRepository(database.perfilDao(), SupabaseSessionManager.client)
     private val historicoDao = database.processoFaseHistoricoDao()
 
     val uiState: StateFlow<ProcessoDetalheUiState> = combine(
@@ -49,10 +48,10 @@ class ProcessoDetalheViewModel(
         processoRepository.observarItens(processoId),
         historicoDao.observarPorProcesso(processoId),
         faseRepository.observarTodas(),
-        pessoaRepository.observarTodas()
-    ) { processo, itens, historico, fases, pessoas ->
+        perfilRepository.observarTodos()
+    ) { processo, itens, historico, fases, perfis ->
         val faseMap = fases.associateBy { it.id }
-        val pessoaMap = pessoas.associateBy { it.id }
+        val perfilMap = perfis.associateBy { it.id }
         ProcessoDetalheUiState(
             carregando = false,
             processo = processo,
@@ -64,7 +63,7 @@ class ProcessoDetalheViewModel(
                     HistoricoItemUi(
                         historico = entrada,
                         faseNome = faseMap[entrada.faseId]?.nome ?: "—",
-                        responsavelNome = entrada.responsavelId?.let { pessoaMap[it]?.nome }
+                        responsavelNome = entrada.responsavelId?.let { perfilMap[it]?.nome }
                     )
                 }
         )

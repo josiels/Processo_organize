@@ -11,7 +11,6 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DateRange
-import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
@@ -40,12 +39,10 @@ private data class OpcaoMais(
 @Composable
 fun MaisScreen(
     onCadastroFasesClick: () -> Unit,
-    onCadastroPessoasClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
     val opcoes = listOf(
         OpcaoMais("Cadastro de Fases", Icons.Filled.DateRange, habilitado = true, onClick = onCadastroFasesClick),
-        OpcaoMais("Cadastro de Pessoas", Icons.Filled.Person, habilitado = true, onClick = onCadastroPessoasClick),
         OpcaoMais("Status de sincronização", Icons.Filled.Refresh, habilitado = false) {},
         OpcaoMais("Configurações", Icons.Filled.Settings, habilitado = false) {}
     )
