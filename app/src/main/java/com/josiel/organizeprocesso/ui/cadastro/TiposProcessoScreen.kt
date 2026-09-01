@@ -51,6 +51,7 @@ fun TiposProcessoScreen(
     viewModel: TipoProcessoCadastroViewModel = viewModel()
 ) {
     val tiposProcesso by viewModel.tiposProcesso.collectAsState()
+    val erro by viewModel.erro.collectAsState()
     var tipoEmEdicao by remember { mutableStateOf<TipoProcessoEntity?>(null) }
     var mostrarFormulario by remember { mutableStateOf(false) }
 
@@ -94,6 +95,15 @@ fun TiposProcessoScreen(
                         )
                     }
                 }
+            }
+
+            erro?.let { mensagem ->
+                Text(
+                    mensagem,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                )
             }
 
             PillButton(

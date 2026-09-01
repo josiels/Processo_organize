@@ -52,6 +52,7 @@ fun FasesScreen(
     viewModel: FaseCadastroViewModel = viewModel()
 ) {
     val fases by viewModel.fases.collectAsState()
+    val erro by viewModel.erro.collectAsState()
     var faseEmEdicao by remember { mutableStateOf<FaseEntity?>(null) }
     var mostrarFormulario by remember { mutableStateOf(false) }
 
@@ -95,6 +96,15 @@ fun FasesScreen(
                         )
                     }
                 }
+            }
+
+            erro?.let { mensagem ->
+                Text(
+                    mensagem,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                )
             }
 
             PillButton(

@@ -10,6 +10,8 @@ import com.josiel.organizeprocesso.data.local.ProcessoEntity
 import com.josiel.organizeprocesso.data.local.ProcessoFaseHistoricoEntity
 import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
 import com.josiel.organizeprocesso.data.repository.FaseRepository
+import com.josiel.organizeprocesso.data.repository.HistoricoFaseRepository
+import com.josiel.organizeprocesso.data.repository.ItemRepository
 import com.josiel.organizeprocesso.data.repository.PerfilRepository
 import com.josiel.organizeprocesso.data.repository.ProcessoRepository
 import com.josiel.organizeprocesso.data.repository.TipoProcessoRepository
@@ -18,9 +20,13 @@ import com.josiel.organizeprocesso.domain.usecase.AcaoDesignacao
 import com.josiel.organizeprocesso.domain.usecase.acaoDesignacaoDisponivel
 import com.josiel.organizeprocesso.domain.usecase.calcularSemaforo
 import com.josiel.organizeprocesso.domain.usecase.podeEditarProcesso
+import com.josiel.organizeprocesso.ui.common.mensagemDeErro
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
@@ -43,11 +49,15 @@ data class ProcessoDetalheUiState(
     val historico: List<HistoricoItemUi> = emptyList(),
     val designadoParaNome: String? = null,
     val designadoPorNome: String? = null,
+    /** Semáforo de "dias parado na fase corrente" (limites da Fase). */
+    val statusSemaforo: StatusSemaforo = StatusSemaforo.OK,
+    val diasParado: Long = 0L,
     val statusSemaforoDesignacao: StatusSemaforo = StatusSemaforo.OK,
     val diasDesdeDesignado: Long? = null,
     val acaoDesignacao: AcaoDesignacao = AcaoDesignacao.NENHUMA,
     val podeEditar: Boolean = false,
-    val perfisAtivos: List<PerfilEntity> = emptyList()
+    val perfisAtivos: List<PerfilEntity> = emptyList(),
+    val erro: String? = null
 )
 
 /** ViewModel de Detalhe do Processo (spec do Plano 2B, seção 4.3). */
@@ -61,9 +71,31 @@ class ProcessoDetalheViewModel(
     private val faseRepository = FaseRepository(database.faseDao(), SupabaseSessionManager.client)
     private val perfilRepository = PerfilRepository(database.perfilDao(), SupabaseSessionManager.client)
     private val tipoProcessoRepository = TipoProcessoRepository(database.tipoProcessoDao(), SupabaseSessionManager.client)
+    private val historicoRepository = HistoricoFaseRepository(database, SupabaseSessionManager.client)
+    private val itemRepository = ItemRepository(database.itemDao(), SupabaseSessionManager.client)
     private val historicoDao = database.processoFaseHistoricoDao()
 
-    val uiState: StateFlow<ProcessoDetalheUiState> = combine(
+    private val _erro = MutableStateFlow<String?>(null)
+
+    init {
+        // Sync preguiçoso por processo: `processo_fase_historico` e `itens` não
+        // entram no sync pós-login por processo, e o cache do Room é destrutivo
+        // entre versões — sem isto a timeline, a aba Itens e o semáforo de fase
+        // ficam vazios até alguma escrita incidental repopular a tabela.
+        viewModelScope.launch {
+            try {
+                historicoRepository.sincronizar(processoId)
+                itemRepository.sincronizar(processoId)
+            } catch (e: Exception) {
+                if (e is CancellationException) {
+                    throw e
+                }
+                _erro.value = mensagemDeErro(e)
+            }
+        }
+    }
+
+    private val estadoBase: Flow<ProcessoDetalheUiState> = combine(
         processoRepository.observarPorId(processoId),
         processoRepository.observarItens(processoId),
         historicoDao.observarPorProcesso(processoId),
@@ -76,11 +108,12 @@ class ProcessoDetalheViewModel(
         val faseMap = fases.associateBy { it.id }
         val perfilMap = perfis.associateBy { it.id }
         val tipoProcessoMap = tiposProcesso.associateBy { it.id }
-        val sessao = SupabaseSessionManager.perfilAtual
+        val sessao = SupabaseSessionManager.perfilAtual.value
+        val hoje = LocalDate.now()
 
         val tipoProcesso = processo?.let { tipoProcessoMap[it.tipoProcessoId] }
         val diasDesdeDesignado = processo?.designadoEm?.let {
-            ChronoUnit.DAYS.between(it.atZone(ZoneId.systemDefault()).toLocalDate(), LocalDate.now())
+            ChronoUnit.DAYS.between(it.atZone(ZoneId.systemDefault()).toLocalDate(), hoje)
         }
         val statusSemaforoDesignacao = if (diasDesdeDesignado != null && tipoProcesso != null) {
             calcularSemaforo(diasDesdeDesignado, tipoProcesso.diasAlertaAtencao, tipoProcesso.diasAlertaCritico)
@@ -88,10 +121,19 @@ class ProcessoDetalheViewModel(
             StatusSemaforo.OK
         }
 
+        // Semáforo de fase: mesma conta de ProcessoListViewModel (dias desde a
+        // entrada na fase corrente vs. limites da própria Fase). Spec do Plano
+        // 2B, seção 4.2 pede os dois semáforos lado a lado aqui também.
+        val faseAtual = processo?.let { faseMap[it.faseAtualId] }
+        val historicoAtivo = historico.find { it.dataSaida == null }
+        val diasParado = historicoAtivo?.let { ChronoUnit.DAYS.between(it.dataEntrada, hoje) } ?: 0L
+        val statusSemaforo = faseAtual?.let { calcularSemaforo(diasParado, it.diasAlertaAtencao, it.diasAlertaCritico) }
+            ?: StatusSemaforo.OK
+
         ProcessoDetalheUiState(
             carregando = false,
             processo = processo,
-            faseAtualNome = processo?.let { faseMap[it.faseAtualId]?.nome } ?: "",
+            faseAtualNome = faseAtual?.nome ?: "",
             tipoProcessoNome = tipoProcesso?.nome ?: "",
             itens = itens,
             historico = historico
@@ -105,6 +147,8 @@ class ProcessoDetalheViewModel(
                 },
             designadoParaNome = processo?.responsavelId?.let { perfilMap[it]?.nome },
             designadoPorNome = processo?.designadoPor?.let { perfilMap[it]?.nome },
+            statusSemaforo = statusSemaforo,
+            diasParado = diasParado,
             statusSemaforoDesignacao = statusSemaforoDesignacao,
             diasDesdeDesignado = diasDesdeDesignado,
             acaoDesignacao = if (processo != null && sessao != null) {
@@ -116,9 +160,25 @@ class ProcessoDetalheViewModel(
                 podeEditarProcesso(sessao.papel, processo.responsavelId, sessao.id),
             perfisAtivos = perfis.filter { it.ativo }
         )
+    }
+
+    // O erro de escrita vive num fluxo próprio porque o estado principal é
+    // derivado do Room (combine + stateIn) e não pode ser reatribuído.
+    val uiState: StateFlow<ProcessoDetalheUiState> = combine(estadoBase, _erro) { estado, erro ->
+        estado.copy(erro = erro)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProcessoDetalheUiState())
 
     fun designar(novoResponsavelId: String?) {
-        viewModelScope.launch { processoRepository.designar(processoId, novoResponsavelId) }
+        viewModelScope.launch {
+            _erro.value = null
+            try {
+                processoRepository.designar(processoId, novoResponsavelId)
+            } catch (e: Exception) {
+                if (e is CancellationException) {
+                    throw e
+                }
+                _erro.value = mensagemDeErro(e)
+            }
+        }
     }
 }

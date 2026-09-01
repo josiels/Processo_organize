@@ -1,3 +1,5 @@
+@file:OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+
 package com.josiel.organizeprocesso.ui.processos
 
 import android.app.Application
@@ -13,13 +15,16 @@ import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
 import com.josiel.organizeprocesso.data.repository.DiligenciaRepository
 import com.josiel.organizeprocesso.data.repository.FaseRepository
 import com.josiel.organizeprocesso.data.repository.HistoricoFaseRepository
+import com.josiel.organizeprocesso.data.repository.ItemRepository
 import com.josiel.organizeprocesso.data.repository.PerfilRepository
 import com.josiel.organizeprocesso.data.repository.ProcessoRepository
 import com.josiel.organizeprocesso.domain.model.StatusSemaforo
 import com.josiel.organizeprocesso.domain.usecase.calcularSemaforo
 import com.josiel.organizeprocesso.domain.usecase.podeEditarProcesso
+import com.josiel.organizeprocesso.ui.common.mensagemDeErro
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -44,7 +49,8 @@ data class AvancarFaseUiState(
     val executorId: String? = null,
     val prazoLimite: LocalDate? = null,
     val notificarPrazo: Boolean = false,
-    val podeEditar: Boolean = false
+    val podeEditar: Boolean = false,
+    val erro: String? = null
 )
 
 /** ViewModel da tela Avançar/Retroceder Fase (spec do Plano 2B, seção 4.4). */
@@ -59,6 +65,7 @@ class AvancarFaseViewModel(
     private val perfilRepository = PerfilRepository(database.perfilDao(), SupabaseSessionManager.client)
     private val historicoRepository = HistoricoFaseRepository(database, SupabaseSessionManager.client)
     private val diligenciaRepository = DiligenciaRepository(database.diligenciaDao(), SupabaseSessionManager.client)
+    private val itemRepository = ItemRepository(database.itemDao(), SupabaseSessionManager.client)
 
     private val _uiState = MutableStateFlow(AvancarFaseUiState())
     val uiState: StateFlow<AvancarFaseUiState> = _uiState.asStateFlow()
@@ -71,6 +78,22 @@ class AvancarFaseViewModel(
     private var historicoSincronizado: String? = null
 
     init {
+        // Sync preguiçoso por processo: sem isto `historicoAtual` fica null para
+        // sempre num cache recém-criado (o Room é destrutivo entre versões e o
+        // sync pós-login não puxa estas tabelas por processo), o ícone Salvar
+        // fica desabilitado e as diligências nunca sincronizam.
+        viewModelScope.launch {
+            try {
+                historicoRepository.sincronizar(processoId)
+                itemRepository.sincronizar(processoId)
+            } catch (e: Exception) {
+                if (e is CancellationException) {
+                    throw e
+                }
+                _uiState.value = _uiState.value.copy(erro = mensagemDeErro(e))
+            }
+        }
+
         viewModelScope.launch {
             combine(
                 processoRepository.observarPorId(processoId),
@@ -82,7 +105,7 @@ class AvancarFaseViewModel(
                 val diasParado = historico?.let { ChronoUnit.DAYS.between(it.dataEntrada, LocalDate.now()) } ?: 0L
                 val semaforo = faseAtual?.let { calcularSemaforo(diasParado, it.diasAlertaAtencao, it.diasAlertaCritico) }
                     ?: StatusSemaforo.OK
-                val sessao = SupabaseSessionManager.perfilAtual
+                val sessao = SupabaseSessionManager.perfilAtual.value
                 val podeEditar = processo != null && sessao != null &&
                     podeEditarProcesso(sessao.papel, processo.responsavelId, sessao.id)
                 Sextupla(processo, faseAtual, historico, semaforo, fases to perfis, podeEditar)
@@ -136,13 +159,21 @@ class AvancarFaseViewModel(
         if (!estado.podeEditar) return
         val historico = estado.historicoAtual ?: return
         viewModelScope.launch {
-            historicoRepository.salvarEntradaAtual(
-                historico = historico,
-                responsavelId = estado.executorId,
-                prazoLimite = estado.prazoLimite,
-                notificarPrazo = estado.notificarPrazo,
-                novaObservacao = estado.observacao
-            )
+            limparErro()
+            try {
+                historicoRepository.salvarEntradaAtual(
+                    historico = historico,
+                    responsavelId = estado.executorId,
+                    prazoLimite = estado.prazoLimite,
+                    notificarPrazo = estado.notificarPrazo,
+                    novaObservacao = estado.observacao
+                )
+            } catch (e: Exception) {
+                if (e is CancellationException) {
+                    throw e
+                }
+                registrarErro(e)
+            }
         }
     }
 
@@ -151,14 +182,24 @@ class AvancarFaseViewModel(
         if (!estado.podeEditar) return
         val processo = estado.processo ?: return
         viewModelScope.launch {
-            historicoRepository.mudarFase(
-                processo = processo,
-                faseDestinoId = faseDestinoId,
-                executorId = estado.executorId,
-                prazoLimite = estado.prazoLimite,
-                motivoRetorno = motivoRetorno,
-                notificarPrazo = estado.notificarPrazo
-            )
+            limparErro()
+            try {
+                historicoRepository.mudarFase(
+                    processo = processo,
+                    faseDestinoId = faseDestinoId,
+                    executorId = estado.executorId,
+                    prazoLimite = estado.prazoLimite,
+                    motivoRetorno = motivoRetorno,
+                    notificarPrazo = estado.notificarPrazo
+                )
+            } catch (e: Exception) {
+                if (e is CancellationException) {
+                    throw e
+                }
+                registrarErro(e)
+                // Não navega de volta: o usuário precisa ver a mensagem.
+                return@launch
+            }
             onConcluido()
         }
     }
@@ -166,7 +207,27 @@ class AvancarFaseViewModel(
     fun registrarDiligencia(conteudo: String) {
         if (conteudo.isBlank()) return
         val historicoId = _uiState.value.historicoAtual?.id ?: return
-        viewModelScope.launch { diligenciaRepository.registrar(historicoId, conteudo) }
+        viewModelScope.launch {
+            limparErro()
+            try {
+                diligenciaRepository.registrar(historicoId, conteudo)
+            } catch (e: Exception) {
+                if (e is CancellationException) {
+                    throw e
+                }
+                registrarErro(e)
+            }
+        }
+    }
+
+    private fun limparErro() {
+        if (_uiState.value.erro != null) {
+            _uiState.value = _uiState.value.copy(erro = null)
+        }
+    }
+
+    private fun registrarErro(e: Exception) {
+        _uiState.value = _uiState.value.copy(erro = mensagemDeErro(e))
     }
 }
 

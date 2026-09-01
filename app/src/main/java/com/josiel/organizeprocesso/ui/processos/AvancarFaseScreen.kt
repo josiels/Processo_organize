@@ -104,7 +104,15 @@ fun AvancarFaseScreen(
     ) { innerPadding ->
         if (estado.carregando || estado.historicoAtual == null) {
             Box(modifier = Modifier.padding(innerPadding).fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
+                // Sem o histórico da fase corrente a tela inteira fica em
+                // espera; se o sync inicial falhou, mostrar o erro aqui evita
+                // um spinner infinito sem explicação.
+                val erro = estado.erro
+                if (erro != null) {
+                    Text(erro, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error)
+                } else {
+                    CircularProgressIndicator()
+                }
             }
             return@Scaffold
         }
@@ -125,6 +133,9 @@ fun AvancarFaseScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
+            }
+            estado.erro?.let { erro ->
+                Text(erro, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
             }
 
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.fillMaxWidth()) {

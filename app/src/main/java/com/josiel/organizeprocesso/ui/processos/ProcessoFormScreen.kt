@@ -115,6 +115,9 @@ fun ProcessoFormScreen(
                     color = MaterialTheme.colorScheme.error
                 )
             }
+            estado.erro?.let { erro ->
+                Text(erro, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
+            }
 
             OutlinedTextField(
                 value = estado.numero,

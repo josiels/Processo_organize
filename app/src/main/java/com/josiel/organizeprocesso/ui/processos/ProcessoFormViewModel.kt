@@ -10,13 +10,17 @@ import com.josiel.organizeprocesso.data.local.ProcessoEntity
 import com.josiel.organizeprocesso.data.local.TipoProcessoEntity
 import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
 import com.josiel.organizeprocesso.data.repository.FaseRepository
+import com.josiel.organizeprocesso.data.repository.ItemRepository
 import com.josiel.organizeprocesso.data.repository.ProcessoRepository
 import com.josiel.organizeprocesso.data.repository.TipoProcessoRepository
 import com.josiel.organizeprocesso.domain.model.StatusGeralProcesso
 import com.josiel.organizeprocesso.domain.usecase.podeCriarProcesso
 import com.josiel.organizeprocesso.domain.usecase.podeEditarProcesso
+import com.josiel.organizeprocesso.ui.common.MENSAGEM_SESSAO_AUSENTE
+import com.josiel.organizeprocesso.ui.common.mensagemDeErro
 import java.time.LocalDate
 import java.util.UUID
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -38,7 +42,8 @@ data class ProcessoFormUiState(
     val itens: List<ItemEntity> = emptyList(),
     /** Nomes das fases pelas quais o processo já passou (edição) — usado por RegrasBloqueioCampos. */
     val fasesPercorridasNomes: Set<String> = emptySet(),
-    val somenteLeitura: Boolean = false
+    val somenteLeitura: Boolean = false,
+    val erro: String? = null
 ) {
     val valorEstimadoTotal: Double
         get() = itens.sumOf { it.quantidade * it.valorEstimadoUnit }
@@ -57,6 +62,7 @@ class ProcessoFormViewModel(
     private val processoRepository = ProcessoRepository(database, SupabaseSessionManager.client)
     private val faseRepository = FaseRepository(database.faseDao(), SupabaseSessionManager.client)
     private val tipoProcessoRepository = TipoProcessoRepository(database.tipoProcessoDao(), SupabaseSessionManager.client)
+    private val itemRepository = ItemRepository(database.itemDao(), SupabaseSessionManager.client)
 
     val ehEdicao: Boolean = processoId != null
 
@@ -66,7 +72,7 @@ class ProcessoFormViewModel(
     val tiposProcesso: StateFlow<List<TipoProcessoEntity>> = tipoProcessoRepository.observarTodas()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
-    private val sessao = SupabaseSessionManager.perfilAtual
+    private val sessao = SupabaseSessionManager.perfilAtual.value
 
     private val _uiState = MutableStateFlow(ProcessoFormUiState())
     val uiState: StateFlow<ProcessoFormUiState> = _uiState.asStateFlow()
@@ -77,6 +83,20 @@ class ProcessoFormViewModel(
     init {
         if (processoId != null) {
             viewModelScope.launch {
+                // Garante que os itens no cache refletem o servidor ANTES de
+                // semear o formulário: `atualizar()` recalcula
+                // `valor_estimado_total` a partir da lista carregada aqui, e
+                // uma lista vazia por cache frio zeraria o valor no servidor
+                // numa edição que só mexe no "objeto".
+                var erroSync: String? = null
+                try {
+                    itemRepository.sincronizar(processoId)
+                } catch (e: Exception) {
+                    if (e is CancellationException) {
+                        throw e
+                    }
+                    erroSync = mensagemDeErro(e)
+                }
                 val processo = processoRepository.observarPorId(processoId).first()
                 val itens = processoRepository.observarItens(processoId).first()
                 val historico = database.processoFaseHistoricoDao().observarPorProcesso(processoId).first()
@@ -84,9 +104,13 @@ class ProcessoFormViewModel(
                 val fasesPercorridasNomes = historico.mapNotNull { faseMap[it.faseId]?.nome }.toSet()
                 if (processo != null) {
                     processoOriginal = processo
-                    val somenteLeitura = sessao == null ||
+                    // Sem os itens confiáveis, salvar reescreveria o valor
+                    // estimado a partir de uma lista possivelmente incompleta:
+                    // trava em somente leitura enquanto o sync não passar.
+                    val somenteLeitura = erroSync != null || sessao == null ||
                         !podeEditarProcesso(sessao.papel, processo.responsavelId, sessao.id)
                     _uiState.value = ProcessoFormUiState(
+                        erro = erroSync,
                         carregando = false,
                         numero = processo.numero,
                         objeto = processo.objeto,
@@ -101,7 +125,7 @@ class ProcessoFormViewModel(
                         somenteLeitura = somenteLeitura
                     )
                 } else {
-                    _uiState.value = _uiState.value.copy(carregando = false)
+                    _uiState.value = _uiState.value.copy(carregando = false, erro = erroSync)
                 }
             }
         } else {
@@ -188,37 +212,56 @@ class ProcessoFormViewModel(
         val faseId = estado.faseSelecionadaId ?: return
         if (!estado.valido) return
 
+        // Na criação o payload precisa do organizacao_id do perfil; sem perfil
+        // carregado, um `orEmpty()` mandaria "" numa coluna uuid e o servidor
+        // devolveria 400. Melhor nem tentar a escrita.
+        val organizacaoId = SupabaseSessionManager.perfilAtual.value?.organizacaoId
+        if (!ehEdicao && organizacaoId.isNullOrBlank()) {
+            _uiState.value = estado.copy(erro = MENSAGEM_SESSAO_AUSENTE)
+            return
+        }
+
         viewModelScope.launch {
-            val id = if (ehEdicao) {
-                val original = processoOriginal ?: return@launch
-                processoRepository.atualizar(
-                    processo = original.copy(
+            _uiState.value = _uiState.value.copy(erro = null)
+            val id = try {
+                if (ehEdicao) {
+                    val original = processoOriginal ?: return@launch
+                    processoRepository.atualizar(
+                        processo = original.copy(
+                            numero = estado.numero,
+                            objeto = estado.objeto,
+                            descricao = estado.descricao,
+                            orgaoDemandante = estado.orgaoDemandante,
+                            tipoProcessoId = estado.tipoProcessoId.orEmpty(),
+                            dataAbertura = estado.dataAbertura,
+                            faseAtualId = faseId,
+                            statusGeral = estado.statusGeral
+                        ),
+                        itensAtuais = estado.itens,
+                        itensRemovidos = itensRemovidos
+                    )
+                    original.id
+                } else {
+                    processoRepository.criar(
+                        // Não-nulo garantido pelo guard acima.
+                        organizacaoId = organizacaoId.orEmpty(),
                         numero = estado.numero,
                         objeto = estado.objeto,
                         descricao = estado.descricao,
                         orgaoDemandante = estado.orgaoDemandante,
                         tipoProcessoId = estado.tipoProcessoId.orEmpty(),
                         dataAbertura = estado.dataAbertura,
-                        faseAtualId = faseId,
-                        statusGeral = estado.statusGeral
-                    ),
-                    itensAtuais = estado.itens,
-                    itensRemovidos = itensRemovidos
-                )
-                original.id
-            } else {
-                processoRepository.criar(
-                    organizacaoId = SupabaseSessionManager.perfilAtual?.organizacaoId.orEmpty(),
-                    numero = estado.numero,
-                    objeto = estado.objeto,
-                    descricao = estado.descricao,
-                    orgaoDemandante = estado.orgaoDemandante,
-                    tipoProcessoId = estado.tipoProcessoId.orEmpty(),
-                    dataAbertura = estado.dataAbertura,
-                    faseInicialId = faseId,
-                    statusGeral = estado.statusGeral,
-                    itens = estado.itens
-                )
+                        faseInicialId = faseId,
+                        statusGeral = estado.statusGeral,
+                        itens = estado.itens
+                    )
+                }
+            } catch (e: Exception) {
+                if (e is CancellationException) {
+                    throw e
+                }
+                _uiState.value = _uiState.value.copy(erro = mensagemDeErro(e))
+                return@launch
             }
             onSalvo(id)
         }
