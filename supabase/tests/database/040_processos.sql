@@ -1,5 +1,5 @@
 begin;
-select plan(7);
+select plan(8);
 
 select has_table('public', 'processos', 'processos table should exist');
 select has_enum('public', 'status_geral_processo', 'status_geral_processo enum should exist');
@@ -69,6 +69,18 @@ select results_eq(
   $$select responsavel_id from public.processos where id = '40000000-0000-0000-0000-000000000001'$$,
   array['00000000-0000-0000-0000-000000000003'::uuid],
   'A different usuário cannot take a processo already assigned to someone else (RLS silently no-ops the UPDATE)'
+);
+-- Admin can reassign a processo that is already assigned to someone else,
+-- via the public.auth_papel() = 'admin' disjunct of the processos_update
+-- policy. This is the mechanism Tasks 7-9's designation/reassignment
+-- workflows depend on.
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', true);
+update public.processos set responsavel_id = '00000000-0000-0000-0000-000000000005'
+where id = '40000000-0000-0000-0000-000000000001';
+select results_eq(
+  $$select responsavel_id from public.processos where id = '40000000-0000-0000-0000-000000000001'$$,
+  array['00000000-0000-0000-0000-000000000005'::uuid],
+  'Admin can reassign a processo already assigned to a different usuário'
 );
 reset role;
 
