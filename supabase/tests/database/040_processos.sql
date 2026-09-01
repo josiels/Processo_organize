@@ -1,5 +1,5 @@
 begin;
-select plan(8);
+select plan(9);
 
 select has_table('public', 'processos', 'processos table should exist');
 select has_enum('public', 'status_geral_processo', 'status_geral_processo enum should exist');
@@ -53,34 +53,56 @@ select results_eq(
   array['001/2026'],
   'Non-admin user can read the org''s processos (transparency)'
 );
--- orphan process: usuário can self-assign
-update public.processos set responsavel_id = '00000000-0000-0000-0000-000000000003'
-where id = '40000000-0000-0000-0000-000000000001';
-select ok(true, 'Usuário can self-assign an orphan processo');
--- Another usuário cannot steal an already-assigned processo. This UPDATE's
--- USING clause does not match the row for this caller, so Postgres RLS
--- silently filters it to 0 rows affected rather than raising an exception
--- (unlike INSERT, a non-matching UPDATE is not an error) — assert the data
--- is unchanged, not that an exception was thrown.
-select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000005', true);
-update public.processos set responsavel_id = '00000000-0000-0000-0000-000000000005'
-where id = '40000000-0000-0000-0000-000000000001';
+-- MECHANISM UNDER TEST: the processos_proteger_designacao trigger (column
+-- protection), NOT RLS. The processos_update policy's USING clause does match
+-- this row for this caller (it is orphan), so the UPDATE is not filtered out —
+-- it reaches the trigger, which rejects it because responsavel_id changed.
+-- Self-assignment must go through designar_processo() so that the designacoes
+-- audit row and the perfis.ultimo_recebimento_em counter are written too.
+select throws_ok(
+  $$update public.processos set responsavel_id = '00000000-0000-0000-0000-000000000003'
+    where id = '40000000-0000-0000-0000-000000000001'$$,
+  'P0001',
+  null,
+  'Usuário cannot self-assign an orphan processo with a raw UPDATE (trigger blocks the designation columns)'
+);
+-- The sanctioned path: the same self-assignment via designar_processo()
+-- succeeds, giving the rest of this file an actually-assigned processo.
+select public.designar_processo(
+  '40000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003'
+);
 select results_eq(
   $$select responsavel_id from public.processos where id = '40000000-0000-0000-0000-000000000001'$$,
   array['00000000-0000-0000-0000-000000000003'::uuid],
-  'A different usuário cannot take a processo already assigned to someone else (RLS silently no-ops the UPDATE)'
+  'Usuário can self-assign an orphan processo via designar_processo()'
 );
--- Admin can reassign a processo that is already assigned to someone else,
--- via the public.auth_papel() = 'admin' disjunct of the processos_update
--- policy. This is the mechanism Tasks 7-9's designation/reassignment
--- workflows depend on.
-select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', true);
-update public.processos set responsavel_id = '00000000-0000-0000-0000-000000000005'
+-- MECHANISM UNDER TEST: RLS row-touch eligibility, NOT the trigger. A different
+-- usuário is not the owner, not an admin, and the processo is no longer orphan,
+-- so processos_update's USING clause does not match the row for them at all.
+-- A non-matching UPDATE is silently filtered to 0 rows (unlike INSERT, it is
+-- not an error), so assert the data is unchanged. Deliberately touching
+-- `descricao` rather than `responsavel_id`: a designation column would trip the
+-- trigger first and prove nothing about row eligibility.
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000005', true);
+update public.processos set descricao = 'invadido'
 where id = '40000000-0000-0000-0000-000000000001';
 select results_eq(
-  $$select responsavel_id from public.processos where id = '40000000-0000-0000-0000-000000000001'$$,
-  array['00000000-0000-0000-0000-000000000005'::uuid],
-  'Admin can reassign a processo already assigned to a different usuário'
+  $$select descricao from public.processos where id = '40000000-0000-0000-0000-000000000001'$$,
+  array[''],
+  'A different usuário cannot edit a processo already assigned to someone else (RLS silently no-ops the UPDATE)'
+);
+-- MECHANISM UNDER TEST: the trigger again, this time for an admin. Admins keep
+-- full row eligibility under processos_update (they can still edit objeto,
+-- descricao, status_geral), but reassignment is no longer reachable by raw
+-- UPDATE for them either — only designar_processo() can move the designation
+-- columns, and 070_designacoes.sql covers that path for admins.
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000002', true);
+select throws_ok(
+  $$update public.processos set responsavel_id = '00000000-0000-0000-0000-000000000005'
+    where id = '40000000-0000-0000-0000-000000000001'$$,
+  'P0001',
+  null,
+  'Admin cannot reassign a processo with a raw UPDATE either (trigger blocks the designation columns)'
 );
 reset role;
 

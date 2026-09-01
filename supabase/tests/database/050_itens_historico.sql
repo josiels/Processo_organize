@@ -1,5 +1,5 @@
 begin;
-select plan(10);
+select plan(12);
 
 select has_table('public', 'itens', 'itens table should exist');
 select has_table('public', 'processo_fase_historico', 'processo_fase_historico table should exist');
@@ -22,6 +22,14 @@ insert into public.processos (
   '40000000-0000-0000-0000-000000000001', '10000000-0000-0000-0000-000000000001',
   '001/2026', 'x', '30000000-0000-0000-0000-000000000001', current_date,
   '20000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000003'
+);
+-- An ORPHAN processo (responsavel_id is null) for the Finding B coverage below.
+insert into public.processos (
+  id, organizacao_id, numero, objeto, tipo_processo_id, data_abertura, fase_atual_id, responsavel_id
+) values (
+  '40000000-0000-0000-0000-000000000002', '10000000-0000-0000-0000-000000000001',
+  '002/2026', 'x', '30000000-0000-0000-0000-000000000001', current_date,
+  '20000000-0000-0000-0000-000000000001', null
 );
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000003', true);
@@ -87,6 +95,28 @@ select throws_ok(
   '42501',
   null,
   'A colleague in the same organization cannot insert a historico entry into a processo they do not own'
+);
+
+-- Spec section 2: a usuario acts on the processos "que são dele **ou que estão
+-- órfãos**". Usuário A2 is neither an admin nor the responsável for anything,
+-- but processo 002/2026 has responsavel_id is null, so the orphan disjunct of
+-- itens_acesso / processo_fase_historico_acesso must let them write to it —
+-- mirroring the orphan disjunct processos_update has always had.
+insert into public.itens (processo_id, descricao, quantidade, unidade, valor_estimado_unit)
+values ('40000000-0000-0000-0000-000000000002', 'Item órfão', 2, 'un', 50);
+select results_eq(
+  $$select descricao from public.itens where processo_id = '40000000-0000-0000-0000-000000000002'$$,
+  array['Item órfão'],
+  'A usuário who is neither admin nor owner can insert an item into an ORPHAN processo'
+);
+
+insert into public.processo_fase_historico (processo_id, fase_id, data_entrada, observacoes, notificar_prazo)
+values ('40000000-0000-0000-0000-000000000002', '20000000-0000-0000-0000-000000000001', current_date, 'órfão', false);
+select results_eq(
+  $$select observacoes from public.processo_fase_historico
+    where processo_id = '40000000-0000-0000-0000-000000000002'$$,
+  array['órfão'],
+  'A usuário who is neither admin nor owner can insert a historico entry into an ORPHAN processo'
 );
 reset role;
 
