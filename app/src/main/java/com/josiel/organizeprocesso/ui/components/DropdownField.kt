@@ -24,24 +24,26 @@ fun <T> DropdownField(
     selecionado: T?,
     rotulo: (T) -> String,
     onSelecionado: (T) -> Unit,
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    enabled: Boolean = true
 ) {
     var expandido by remember { mutableStateOf(false) }
     ExposedDropdownMenuBox(
-        expanded = expandido,
-        onExpandedChange = { expandido = it },
+        expanded = expandido && enabled,
+        onExpandedChange = { if (enabled) expandido = it },
         modifier = modifier
     ) {
         OutlinedTextField(
             value = selecionado?.let(rotulo).orEmpty(),
             onValueChange = {},
             readOnly = true,
+            enabled = enabled,
             label = { Text(label) },
-            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido) },
+            trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expandido && enabled) },
             modifier = Modifier.menuAnchor(ExposedDropdownMenuAnchorType.PrimaryNotEditable).fillMaxWidth()
         )
         ExposedDropdownMenu(
-            expanded = expandido,
+            expanded = expandido && enabled,
             onDismissRequest = { expandido = false }
         ) {
             opcoes.forEach { opcao ->

@@ -39,6 +39,7 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.josiel.organizeprocesso.data.local.ItemEntity
+import com.josiel.organizeprocesso.data.local.TipoProcessoEntity
 import com.josiel.organizeprocesso.domain.model.StatusGeralProcesso
 import com.josiel.organizeprocesso.domain.model.rotulo
 import com.josiel.organizeprocesso.domain.usecase.RegrasBloqueioCampos
@@ -64,6 +65,7 @@ fun ProcessoFormScreen(
 
     val estado by viewModel.uiState.collectAsState()
     val fases by viewModel.fases.collectAsState()
+    val tiposProcesso by viewModel.tiposProcesso.collectAsState()
 
     var itemEmEdicao by remember { mutableStateOf<ItemEntity?>(null) }
     var mostrarFormularioItem by remember { mutableStateOf(false) }
@@ -81,7 +83,7 @@ fun ProcessoFormScreen(
                 },
                 actions = {
                     IconButton(
-                        enabled = estado.valido,
+                        enabled = estado.valido && !estado.somenteLeitura,
                         onClick = { viewModel.salvar(onSalvo) }
                     ) {
                         Icon(Icons.Filled.Check, contentDescription = "Salvar")
@@ -106,23 +108,34 @@ fun ProcessoFormScreen(
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            if (estado.somenteLeitura) {
+                Text(
+                    "Somente leitura — você não pode editar este processo.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
             OutlinedTextField(
                 value = estado.numero,
                 onValueChange = viewModel::atualizarNumero,
                 label = { Text("Número do processo") },
                 singleLine = true,
+                enabled = !estado.somenteLeitura,
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
                 value = estado.objeto,
                 onValueChange = viewModel::atualizarObjeto,
                 label = { Text("Objeto") },
+                enabled = !estado.somenteLeitura,
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
                 value = estado.descricao,
                 onValueChange = viewModel::atualizarDescricao,
                 label = { Text("Descrição") },
+                enabled = !estado.somenteLeitura,
                 modifier = Modifier.fillMaxWidth()
             )
             OutlinedTextField(
@@ -130,13 +143,7 @@ fun ProcessoFormScreen(
                 onValueChange = viewModel::atualizarOrgaoDemandante,
                 label = { Text("Órgão demandante") },
                 singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = estado.tipo,
-                onValueChange = viewModel::atualizarTipo,
-                label = { Text("Tipo (SRP, aquisição direta, serviço...)") },
-                singleLine = true,
+                enabled = !estado.somenteLeitura,
                 modifier = Modifier.fillMaxWidth()
             )
 
@@ -144,7 +151,8 @@ fun ProcessoFormScreen(
                 label = "Data de abertura",
                 data = estado.dataAbertura,
                 onDataSelecionada = viewModel::atualizarDataAbertura,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !estado.somenteLeitura
             )
 
             DropdownField(
@@ -153,11 +161,29 @@ fun ProcessoFormScreen(
                 selecionado = fases.find { it.id == estado.faseSelecionadaId },
                 rotulo = { it.nome },
                 onSelecionado = { viewModel.atualizarFase(it.id) },
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !estado.somenteLeitura
             )
             if (fases.isEmpty()) {
                 Text(
                     "Cadastre ao menos uma fase em Mais > Cadastro de Fases antes de criar um processo.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+
+            DropdownField(
+                label = "Tipo de processo",
+                opcoes = tiposProcesso,
+                selecionado = tiposProcesso.find { it.id == estado.tipoProcessoId },
+                rotulo = { it.nome },
+                onSelecionado = { viewModel.atualizarTipo(it.id) },
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !estado.somenteLeitura
+            )
+            if (tiposProcesso.isEmpty()) {
+                Text(
+                    "Cadastre ao menos um tipo de processo em Mais > Cadastro de Tipos de Processo.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error
                 )
@@ -169,7 +195,8 @@ fun ProcessoFormScreen(
                 selecionado = estado.statusGeral,
                 rotulo = { it.rotulo() },
                 onSelecionado = viewModel::atualizarStatusGeral,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxWidth(),
+                enabled = !estado.somenteLeitura
             )
 
             Text("Itens", style = MaterialTheme.typography.titleMedium, modifier = Modifier.padding(top = 8.dp))
@@ -178,22 +205,27 @@ fun ProcessoFormScreen(
                 ItemRow(
                     item = item,
                     onClick = {
-                        itemEmEdicao = item
-                        mostrarFormularioItem = true
+                        if (estado.somenteLeitura) {
+                        } else {
+                            itemEmEdicao = item
+                            mostrarFormularioItem = true
+                        }
                     }
                 )
             }
 
-            PillButton(
-                text = "+ Adicionar item",
-                onClick = {
-                    itemEmEdicao = null
-                    mostrarFormularioItem = true
-                },
-                containerColor = MaterialTheme.colorScheme.primaryContainer,
-                contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
-                modifier = Modifier.wrapContentSize()
-            )
+            if (!estado.somenteLeitura) {
+                PillButton(
+                    text = "+ Adicionar item",
+                    onClick = {
+                        itemEmEdicao = null
+                        mostrarFormularioItem = true
+                    },
+                    containerColor = MaterialTheme.colorScheme.primaryContainer,
+                    contentColor = MaterialTheme.colorScheme.onPrimaryContainer,
+                    modifier = Modifier.wrapContentSize()
+                )
+            }
 
             Text(
                 "Valor estimado total: R$ %.2f".format(estado.valorEstimadoTotal),

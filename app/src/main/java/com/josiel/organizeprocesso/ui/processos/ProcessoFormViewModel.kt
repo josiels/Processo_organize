@@ -7,10 +7,14 @@ import com.josiel.organizeprocesso.data.local.AppDatabase
 import com.josiel.organizeprocesso.data.local.FaseEntity
 import com.josiel.organizeprocesso.data.local.ItemEntity
 import com.josiel.organizeprocesso.data.local.ProcessoEntity
+import com.josiel.organizeprocesso.data.local.TipoProcessoEntity
 import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
 import com.josiel.organizeprocesso.data.repository.FaseRepository
 import com.josiel.organizeprocesso.data.repository.ProcessoRepository
+import com.josiel.organizeprocesso.data.repository.TipoProcessoRepository
 import com.josiel.organizeprocesso.domain.model.StatusGeralProcesso
+import com.josiel.organizeprocesso.domain.usecase.podeCriarProcesso
+import com.josiel.organizeprocesso.domain.usecase.podeEditarProcesso
 import java.time.LocalDate
 import java.util.UUID
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,19 +31,20 @@ data class ProcessoFormUiState(
     val objeto: String = "",
     val descricao: String = "",
     val orgaoDemandante: String = "",
-    val tipo: String = "",
+    val tipoProcessoId: String? = null,
     val dataAbertura: LocalDate = LocalDate.now(),
     val faseSelecionadaId: String? = null,
     val statusGeral: StatusGeralProcesso = StatusGeralProcesso.EM_ANDAMENTO,
     val itens: List<ItemEntity> = emptyList(),
     /** Nomes das fases pelas quais o processo já passou (edição) — usado por RegrasBloqueioCampos. */
-    val fasesPercorridasNomes: Set<String> = emptySet()
+    val fasesPercorridasNomes: Set<String> = emptySet(),
+    val somenteLeitura: Boolean = false
 ) {
     val valorEstimadoTotal: Double
         get() = itens.sumOf { it.quantidade * it.valorEstimadoUnit }
 
     val valido: Boolean
-        get() = numero.isNotBlank() && objeto.isNotBlank() && faseSelecionadaId != null
+        get() = numero.isNotBlank() && objeto.isNotBlank() && faseSelecionadaId != null && tipoProcessoId != null
 }
 
 /** ViewModel de criação/edição de Processo + Itens (ROADMAP.md, passo 6). */
@@ -51,11 +56,17 @@ class ProcessoFormViewModel(
     private val database = AppDatabase.getInstance(application)
     private val processoRepository = ProcessoRepository(database, SupabaseSessionManager.client)
     private val faseRepository = FaseRepository(database.faseDao(), SupabaseSessionManager.client)
+    private val tipoProcessoRepository = TipoProcessoRepository(database.tipoProcessoDao(), SupabaseSessionManager.client)
 
     val ehEdicao: Boolean = processoId != null
 
     val fases: StateFlow<List<FaseEntity>> = faseRepository.observarTodas()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    val tiposProcesso: StateFlow<List<TipoProcessoEntity>> = tipoProcessoRepository.observarTodas()
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    private val sessao = SupabaseSessionManager.perfilAtual
 
     private val _uiState = MutableStateFlow(ProcessoFormUiState())
     val uiState: StateFlow<ProcessoFormUiState> = _uiState.asStateFlow()
@@ -73,25 +84,29 @@ class ProcessoFormViewModel(
                 val fasesPercorridasNomes = historico.mapNotNull { faseMap[it.faseId]?.nome }.toSet()
                 if (processo != null) {
                     processoOriginal = processo
+                    val somenteLeitura = sessao == null ||
+                        !podeEditarProcesso(sessao.papel, processo.responsavelId, sessao.id)
                     _uiState.value = ProcessoFormUiState(
                         carregando = false,
                         numero = processo.numero,
                         objeto = processo.objeto,
                         descricao = processo.descricao,
                         orgaoDemandante = processo.orgaoDemandante,
-                        tipo = processo.tipoProcessoId,
+                        tipoProcessoId = processo.tipoProcessoId,
                         dataAbertura = processo.dataAbertura,
                         faseSelecionadaId = processo.faseAtualId,
                         statusGeral = processo.statusGeral,
                         itens = itens,
-                        fasesPercorridasNomes = fasesPercorridasNomes
+                        fasesPercorridasNomes = fasesPercorridasNomes,
+                        somenteLeitura = somenteLeitura
                     )
                 } else {
                     _uiState.value = _uiState.value.copy(carregando = false)
                 }
             }
         } else {
-            _uiState.value = _uiState.value.copy(carregando = false)
+            val podeCriar = sessao?.let { podeCriarProcesso(it.papel) } ?: false
+            _uiState.value = _uiState.value.copy(carregando = false, somenteLeitura = !podeCriar)
         }
     }
 
@@ -111,8 +126,8 @@ class ProcessoFormViewModel(
         _uiState.value = _uiState.value.copy(orgaoDemandante = valor)
     }
 
-    fun atualizarTipo(valor: String) {
-        _uiState.value = _uiState.value.copy(tipo = valor)
+    fun atualizarTipo(tipoProcessoId: String) {
+        _uiState.value = _uiState.value.copy(tipoProcessoId = tipoProcessoId)
     }
 
     fun atualizarDataAbertura(valor: LocalDate) {
@@ -169,6 +184,7 @@ class ProcessoFormViewModel(
 
     fun salvar(onSalvo: (String) -> Unit) {
         val estado = _uiState.value
+        if (estado.somenteLeitura) return
         val faseId = estado.faseSelecionadaId ?: return
         if (!estado.valido) return
 
@@ -181,7 +197,7 @@ class ProcessoFormViewModel(
                         objeto = estado.objeto,
                         descricao = estado.descricao,
                         orgaoDemandante = estado.orgaoDemandante,
-                        tipoProcessoId = estado.tipo,
+                        tipoProcessoId = estado.tipoProcessoId.orEmpty(),
                         dataAbertura = estado.dataAbertura,
                         faseAtualId = faseId,
                         statusGeral = estado.statusGeral
@@ -197,7 +213,7 @@ class ProcessoFormViewModel(
                     objeto = estado.objeto,
                     descricao = estado.descricao,
                     orgaoDemandante = estado.orgaoDemandante,
-                    tipoProcessoId = estado.tipo,
+                    tipoProcessoId = estado.tipoProcessoId.orEmpty(),
                     dataAbertura = estado.dataAbertura,
                     faseInicialId = faseId,
                     statusGeral = estado.statusGeral,

@@ -29,7 +29,8 @@ fun DateField(
     data: LocalDate?,
     onDataSelecionada: (LocalDate) -> Unit,
     modifier: Modifier = Modifier,
-    onLimpar: (() -> Unit)? = null
+    onLimpar: (() -> Unit)? = null,
+    enabled: Boolean = true
 ) {
     var mostrarSeletor by remember { mutableStateOf(false) }
 
@@ -37,14 +38,15 @@ fun DateField(
         value = data?.format(formatoData).orEmpty(),
         onValueChange = {},
         readOnly = true,
+        enabled = enabled,
         label = { Text(label) },
         placeholder = { Text("Não definido") },
         trailingIcon = {
             Row {
-                if (onLimpar != null && data != null) {
+                if (enabled && onLimpar != null && data != null) {
                     TextButton(onClick = onLimpar) { Text("Limpar") }
                 }
-                TextButton(onClick = { mostrarSeletor = true }) { Text("Alterar") }
+                TextButton(onClick = { if (enabled) mostrarSeletor = true }) { Text("Alterar") }
             }
         },
         modifier = modifier
