@@ -13,7 +13,9 @@ import io.github.jan.supabase.postgrest.Postgrest
 import io.github.jan.supabase.postgrest.postgrest
 import io.github.jan.supabase.postgrest.query.Columns
 import io.github.jan.supabase.realtime.Realtime
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 
 /** Espelha uma linha de `public.perfis`, já convertida para os tipos do domínio do app. */
 data class PerfilSessao(
@@ -42,8 +44,18 @@ object SupabaseSessionManager {
     val sessionStatus: StateFlow<SessionStatus>
         get() = client.auth.sessionStatus
 
-    var perfilAtual: PerfilSessao? = null
-        private set
+    private val _perfilAtual = MutableStateFlow<PerfilSessao?>(null)
+
+    /**
+     * Perfil de quem está logado. É um StateFlow (e não um `var`) porque o
+     * plugin Auth restaura a sessão persistida sozinho num cold start — sem
+     * passar por `login()` —, e os gates de permissão da UI precisam ver o
+     * perfil recarregado nesse caminho também (senão todo admin que reabre o
+     * app vira espectador somente-leitura). Quem recarrega no cold start é o
+     * `LaunchedEffect(sessionStatus)` de `AppNavHost`, antes de navegar para
+     * fora do Login.
+     */
+    val perfilAtual: StateFlow<PerfilSessao?> = _perfilAtual.asStateFlow()
 
     suspend fun login(email: String, senha: String) {
         client.auth.signInWith(Email) {
@@ -55,17 +67,18 @@ object SupabaseSessionManager {
 
     suspend fun logout() {
         client.auth.signOut()
-        perfilAtual = null
+        _perfilAtual.value = null
     }
 
-    private suspend fun carregarPerfilAtual() {
+    /** Lê `public.perfis` do usuário autenticado e publica em [perfilAtual]. */
+    suspend fun carregarPerfilAtual() {
         val userId = client.auth.currentUserOrNull()?.id ?: return
         val dto = client.postgrest["perfis"]
             .select(columns = Columns.ALL) {
                 filter { eq("id", userId) }
             }
             .decodeSingle<PerfilDto>()
-        perfilAtual = PerfilSessao(
+        _perfilAtual.value = PerfilSessao(
             id = dto.id,
             organizacaoId = dto.organizacaoId,
             papel = papelDoTexto(dto.papel)

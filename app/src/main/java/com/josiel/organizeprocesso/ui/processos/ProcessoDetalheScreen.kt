@@ -158,18 +158,27 @@ private fun AbaDadosGerais(
         CampoDado("Objeto", processo.objeto)
         if (processo.descricao.isNotBlank()) CampoDado("Descrição", processo.descricao)
         CampoDado("Órgão demandante", processo.orgaoDemandante)
-        if (processo.tipoProcessoId.isNotBlank()) CampoDado("Tipo", processo.tipoProcessoId)
         CampoDado("Valor estimado total", "R$ %.2f".format(processo.valorEstimadoTotal))
         CampoDado("Data de abertura", processo.dataAbertura.format(formatoData))
         if (estado.tipoProcessoNome.isNotBlank()) CampoDado("Tipo de processo", estado.tipoProcessoNome)
         CampoDado("Designado a", estado.designadoParaNome ?: "Ninguém (órfão)")
         if (estado.designadoPorNome != null) CampoDado("Designado por", estado.designadoPorNome)
 
+        // Os dois semáforos lado a lado (spec do Plano 2B, seção 4.2), mesma
+        // disposição do card da lista de Processos.
         Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column {
+                Text("Fase", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SemaforoPill(status = estado.statusSemaforo)
+            }
             Column {
                 Text("Designação", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 SemaforoPill(status = estado.statusSemaforoDesignacao)
             }
+        }
+
+        estado.erro?.let { erro ->
+            Text(erro, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error)
         }
 
         when (estado.acaoDesignacao) {
@@ -182,7 +191,7 @@ private fun AbaDadosGerais(
             )
             AcaoDesignacao.ASSUMIR -> PillButton(
                 text = "Assumir processo",
-                onClick = { onDesignar(SupabaseSessionManager.perfilAtual?.id) },
+                onClick = { onDesignar(SupabaseSessionManager.perfilAtual.value?.id) },
                 containerColor = MaterialTheme.colorScheme.secondary,
                 contentColor = MaterialTheme.colorScheme.onSecondary,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)

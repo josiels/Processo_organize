@@ -55,4 +55,19 @@ class PermissoesProcessoTest {
     fun `usuario em processo de outra pessoa nao tem acao`() {
         assertEquals(AcaoDesignacao.NENHUMA, acaoDesignacaoDisponivel(Papel.USUARIO, responsavelId = "outro", usuarioId = "eu"))
     }
+
+    /**
+     * SUPER_ADMIN não é tratado à parte: cai na mesma regra de "processo órfão
+     * é editável por qualquer um". Fica documentado aqui porque o backstop
+     * real é a RLS do backend (super_admin não tem organizacao_id), não a UI.
+     */
+    @Test
+    fun `super admin cai na regra de processo orfao ao editar`() {
+        assertTrue(podeEditarProcesso(Papel.SUPER_ADMIN, responsavelId = null, usuarioId = "eu"))
+    }
+
+    @Test
+    fun `super admin em processo orfao recebe acao assumir`() {
+        assertEquals(AcaoDesignacao.ASSUMIR, acaoDesignacaoDisponivel(Papel.SUPER_ADMIN, responsavelId = null, usuarioId = "eu"))
+    }
 }

@@ -71,7 +71,11 @@ fun ProcessosScreen(
     viewModel: ProcessoListViewModel = viewModel()
 ) {
     val itens by viewModel.itens.collectAsState()
-    val podeCriar = SupabaseSessionManager.perfilAtual?.papel?.let(::podeCriarProcesso) ?: false
+    // Coletado (e não lido como valor solto): num cold start com sessão
+    // persistida o perfil chega depois da primeira composição, e o botão de
+    // criar precisa reaparecer para o admin sem exigir novo login.
+    val perfil by SupabaseSessionManager.perfilAtual.collectAsState()
+    val podeCriar = perfil?.papel?.let(::podeCriarProcesso) ?: false
     var busca by remember { mutableStateOf("") }
     var filtro by remember { mutableStateOf(FiltroProcesso.TODOS) }
     var ordenacao by remember { mutableStateOf(OrdenacaoProcesso.URGENCIA) }

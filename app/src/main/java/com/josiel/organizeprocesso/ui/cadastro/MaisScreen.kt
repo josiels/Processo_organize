@@ -21,6 +21,8 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -47,14 +49,22 @@ fun MaisScreen(
     onSairClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    val ehAdmin = SupabaseSessionManager.perfilAtual?.papel == Papel.ADMIN
-    val opcoes = listOf(
-        OpcaoMais("Cadastro de Fases", Icons.Filled.DateRange, habilitado = ehAdmin, onClick = onCadastroFasesClick),
-        OpcaoMais("Cadastro de Tipos de Processo", Icons.AutoMirrored.Filled.List, habilitado = ehAdmin, onClick = onCadastroTiposProcessoClick),
-        OpcaoMais("Status de sincronização", Icons.Filled.Refresh, habilitado = false) {},
-        OpcaoMais("Configurações", Icons.Filled.Settings, habilitado = false) {},
-        OpcaoMais("Sair", Icons.AutoMirrored.Filled.ExitToApp, habilitado = true, onClick = onSairClick)
-    )
+    // Coletado (e não lido como valor solto): num cold start com sessão
+    // persistida o perfil chega depois da primeira composição.
+    val perfil by SupabaseSessionManager.perfilAtual.collectAsState()
+    val ehAdmin = perfil?.papel == Papel.ADMIN
+    // Cards admin-only são ESCONDIDOS, não desabilitados: `OpcaoMaisCard`
+    // rotula tudo que está desabilitado como "Em breve", o que sugeriria
+    // (falsamente) que o cadastro ainda não existe.
+    val opcoes = buildList {
+        if (ehAdmin) {
+            add(OpcaoMais("Cadastro de Fases", Icons.Filled.DateRange, habilitado = true, onClick = onCadastroFasesClick))
+            add(OpcaoMais("Cadastro de Tipos de Processo", Icons.AutoMirrored.Filled.List, habilitado = true, onClick = onCadastroTiposProcessoClick))
+        }
+        add(OpcaoMais("Status de sincronização", Icons.Filled.Refresh, habilitado = false) {})
+        add(OpcaoMais("Configurações", Icons.Filled.Settings, habilitado = false) {})
+        add(OpcaoMais("Sair", Icons.AutoMirrored.Filled.ExitToApp, habilitado = true, onClick = onSairClick))
+    }
 
     LazyColumn(
         modifier = modifier.fillMaxSize(),
