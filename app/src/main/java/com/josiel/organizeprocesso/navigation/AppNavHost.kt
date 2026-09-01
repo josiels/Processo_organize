@@ -6,7 +6,9 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.compose.NavHost
@@ -14,6 +16,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
+import com.josiel.organizeprocesso.data.local.AppDatabase
+import com.josiel.organizeprocesso.data.remote.RealtimeSyncManager
 import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
 import io.github.jan.supabase.auth.status.SessionStatus
 import com.josiel.organizeprocesso.ui.agenda.AgendaScreen
@@ -25,6 +29,9 @@ import com.josiel.organizeprocesso.ui.processos.AvancarFaseScreen
 import com.josiel.organizeprocesso.ui.processos.ProcessoDetalheScreen
 import com.josiel.organizeprocesso.ui.processos.ProcessoFormScreen
 import com.josiel.organizeprocesso.ui.processos.ProcessosScreen
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 private val abasComBottomBar = listOf(Inicio::class, Processos::class, Agenda::class, Mais::class)
 
@@ -38,6 +45,8 @@ fun AppNavHost() {
         currentDestination?.hierarchy?.any { it.hasRoute(rota) } == true
     }
     val sessionStatus by SupabaseSessionManager.sessionStatus.collectAsState()
+    val context = LocalContext.current
+    val coroutineScope = rememberCoroutineScope()
 
     LaunchedEffect(sessionStatus) {
         val autenticado = sessionStatus is SessionStatus.Authenticated
@@ -74,7 +83,20 @@ fun AppNavHost() {
 
             composable<Mais> {
                 MaisScreen(
-                    onCadastroFasesClick = { navController.navigate(CadastroFases) }
+                    onCadastroFasesClick = { navController.navigate(CadastroFases) },
+                    onSairClick = {
+                        coroutineScope.launch {
+                            // Ordem importa: encerra sessão/realtime antes de limpar o
+                            // cache local, para não deixar dados de uma organização
+                            // visíveis a quem logar em seguida no mesmo aparelho
+                            // (spec do pivô, seção 2.6).
+                            SupabaseSessionManager.logout()
+                            RealtimeSyncManager.encerrar()
+                            withContext(Dispatchers.IO) {
+                                AppDatabase.getInstance(context).clearAllTables()
+                            }
+                        }
+                    }
                 )
             }
 
