@@ -142,6 +142,18 @@ class ProcessoRepository(
         itensAtualizados.forEach { itemDao.upsert(it.paraEntity(processo.id)) }
         itensRemovidos.forEach { itemDao.delete(it) }
     }
+
+    /** Chama a RPC `designar_processo` — admin designa a qualquer um, ou o próprio usuário autoatribui/devolve um órfão (RLS do backend valida). */
+    suspend fun designar(processoId: String, novoResponsavelId: String?) {
+        client.postgrest.rpc(
+            "designar_processo",
+            buildJsonObject {
+                put("p_processo_id", processoId)
+                put("p_novo_responsavel_id", novoResponsavelId)
+            }
+        )
+        sincronizar()
+    }
 }
 
 fun ProcessoDto.paraEntity(): ProcessoEntity = ProcessoEntity(

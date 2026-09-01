@@ -51,7 +51,7 @@ class AvancarFaseViewModel(
     private val processoRepository = ProcessoRepository(database, SupabaseSessionManager.client)
     private val faseRepository = FaseRepository(database.faseDao(), SupabaseSessionManager.client)
     private val perfilRepository = PerfilRepository(database.perfilDao(), SupabaseSessionManager.client)
-    private val historicoRepository = HistoricoFaseRepository(database)
+    private val historicoRepository = HistoricoFaseRepository(database, SupabaseSessionManager.client)
 
     private val _uiState = MutableStateFlow(AvancarFaseUiState())
     val uiState: StateFlow<AvancarFaseUiState> = _uiState.asStateFlow()
@@ -126,14 +126,11 @@ class AvancarFaseViewModel(
     fun mudarFase(faseDestinoId: String, dataEntrada: LocalDate, motivoRetorno: String?, onConcluido: () -> Unit) {
         val estado = _uiState.value
         val processo = estado.processo ?: return
-        val historico = estado.historicoAtual ?: return
         viewModelScope.launch {
             historicoRepository.mudarFase(
                 processo = processo,
-                historicoAtual = historico,
                 faseDestinoId = faseDestinoId,
-                dataEntrada = dataEntrada,
-                responsavelId = estado.responsavelId,
+                executorId = estado.responsavelId,
                 prazoLimite = estado.prazoLimite,
                 motivoRetorno = motivoRetorno,
                 notificarPrazo = estado.notificarPrazo

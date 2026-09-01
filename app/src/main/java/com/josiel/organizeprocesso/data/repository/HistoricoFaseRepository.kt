@@ -1,22 +1,26 @@
 package com.josiel.organizeprocesso.data.repository
 
-import androidx.room.withTransaction
 import com.josiel.organizeprocesso.data.local.AppDatabase
 import com.josiel.organizeprocesso.data.local.ObservacaoVersaoEntity
 import com.josiel.organizeprocesso.data.local.ProcessoEntity
 import com.josiel.organizeprocesso.data.local.ProcessoFaseHistoricoEntity
-import java.time.Instant
+import com.josiel.organizeprocesso.data.remote.dto.ProcessoFaseHistoricoDto
+import com.josiel.organizeprocesso.data.remote.dto.paraEntity
+import io.github.jan.supabase.SupabaseClient
+import io.github.jan.supabase.postgrest.postgrest
 import java.time.LocalDate
 import java.util.UUID
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
- * Orquestra o histórico de fases de um processo: edição da entrada corrente
- * (com versionamento de observação — ARQUITETURA.md, seção 3) e a transição
- * para uma nova fase (ROADMAP.md, passo 9), que nunca é automática.
+ * Orquestra o histórico de fases de um processo — escreve direto no
+ * Postgrest/RPC (spec do pivô, seção 10); Room é cache de leitura.
  */
 class HistoricoFaseRepository(
-    private val database: AppDatabase
+    private val database: AppDatabase,
+    private val client: SupabaseClient
 ) {
     private val processoDao = database.processoDao()
     private val historicoDao = database.processoFaseHistoricoDao()
@@ -28,6 +32,13 @@ class HistoricoFaseRepository(
     fun observarVersoesObservacao(historicoId: String): Flow<List<ObservacaoVersaoEntity>> =
         observacaoVersaoDao.observarPorHistorico(historicoId)
 
+    private suspend fun sincronizarHistorico(processoId: String) {
+        val dtos = client.postgrest["processo_fase_historico"].select {
+            filter { eq("processo_id", processoId) }
+        }.decodeList<ProcessoFaseHistoricoDto>()
+        dtos.forEach { historicoDao.upsert(it.paraEntity()) }
+    }
+
     /** Atualiza responsável/prazo/notificação/observação da entrada corrente, sem trocar de fase. */
     suspend fun salvarEntradaAtual(
         historico: ProcessoFaseHistoricoEntity,
@@ -36,67 +47,55 @@ class HistoricoFaseRepository(
         notificarPrazo: Boolean,
         novaObservacao: String
     ) {
-        val agora = Instant.now()
-        database.withTransaction {
-            historicoDao.upsert(
-                historico.copy(
-                    responsavelId = responsavelId,
-                    prazoLimite = prazoLimite,
-                    notificarPrazo = notificarPrazo,
-                    observacoes = novaObservacao
-                )
-            )
-            if (novaObservacao != historico.observacoes) {
-                observacaoVersaoDao.upsert(
-                    ObservacaoVersaoEntity(
-                        id = UUID.randomUUID().toString(),
-                        processoFaseHistoricoId = historico.id,
-                        conteudo = novaObservacao,
-                        criadoEm = agora
-                    )
-                )
-            }
+        val linha = buildJsonObject {
+            put("responsavel_id", responsavelId)
+            put("prazo_limite", prazoLimite?.toString())
+            put("notificar_prazo", notificarPrazo)
+            put("observacoes", novaObservacao)
         }
+        client.postgrest["processo_fase_historico"].update(linha) {
+            filter { eq("id", historico.id) }
+        }
+        if (novaObservacao != historico.observacoes) {
+            val linhaVersao = buildJsonObject {
+                put("id", UUID.randomUUID().toString())
+                put("processo_fase_historico_id", historico.id)
+                put("conteudo", novaObservacao)
+            }
+            client.postgrest["observacao_versoes"].insert(linhaVersao)
+        }
+        sincronizarHistorico(historico.processoId)
     }
 
     /**
-     * Encerra a entrada corrente e abre uma nova para [faseDestinoId] — nunca
-     * automático, sempre por escolha explícita do usuário (REQUISITOS.md,
-     * seção 9). [motivoRetorno] só é preenchido quando é um retrocesso.
+     * Encerra a entrada corrente e abre uma nova para [faseDestinoId] via a
+     * RPC `avancar_fase()` (transação atômica no servidor) — nunca
+     * automático, sempre por escolha explícita do usuário. [executorId] é
+     * quem executa esta passagem específica (pode divergir do responsável
+     * do processo). [motivoRetorno] só é preenchido quando é um retrocesso.
+     * A RPC sempre usa a data atual do servidor — não aceita data customizada.
      */
     suspend fun mudarFase(
         processo: ProcessoEntity,
-        historicoAtual: ProcessoFaseHistoricoEntity,
         faseDestinoId: String,
-        dataEntrada: LocalDate,
-        responsavelId: String?,
+        executorId: String?,
         prazoLimite: LocalDate?,
         motivoRetorno: String?,
         notificarPrazo: Boolean
     ) {
-        database.withTransaction {
-            historicoDao.upsert(
-                historicoAtual.copy(
-                    dataSaida = dataEntrada
-                )
-            )
-            historicoDao.upsert(
-                ProcessoFaseHistoricoEntity(
-                    id = UUID.randomUUID().toString(),
-                    processoId = processo.id,
-                    faseId = faseDestinoId,
-                    responsavelId = responsavelId,
-                    dataEntrada = dataEntrada,
-                    dataSaida = null,
-                    prazoLimite = prazoLimite,
-                    observacoes = "",
-                    motivoRetorno = motivoRetorno?.takeIf { it.isNotBlank() },
-                    notificarPrazo = notificarPrazo
-                )
-            )
-            processoDao.upsert(
-                processo.copy(faseAtualId = faseDestinoId)
-            )
-        }
+        client.postgrest.rpc(
+            "avancar_fase",
+            buildJsonObject {
+                put("p_processo_id", processo.id)
+                put("p_fase_destino_id", faseDestinoId)
+                put("p_executor_id", executorId)
+                put("p_observacao_inicial", "")
+                put("p_prazo_limite", prazoLimite?.toString())
+                put("p_notificar_prazo", notificarPrazo)
+                put("p_motivo_retorno", motivoRetorno)
+            }
+        )
+        processoDao.upsert(processo.copy(faseAtualId = faseDestinoId))
+        sincronizarHistorico(processo.id)
     }
 }
