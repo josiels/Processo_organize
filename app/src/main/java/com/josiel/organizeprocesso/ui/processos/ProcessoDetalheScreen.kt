@@ -15,26 +15,31 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.selection.selectable
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -45,8 +50,12 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.josiel.organizeprocesso.data.local.ItemEntity
+import com.josiel.organizeprocesso.data.local.PerfilEntity
+import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
 import com.josiel.organizeprocesso.domain.model.rotulo
+import com.josiel.organizeprocesso.domain.usecase.AcaoDesignacao
 import com.josiel.organizeprocesso.ui.components.PillButton
+import com.josiel.organizeprocesso.ui.components.SemaforoPill
 import com.josiel.organizeprocesso.ui.components.StatusPill
 import com.josiel.organizeprocesso.ui.theme.Indigo600
 import com.josiel.organizeprocesso.ui.theme.IndigoPastel
@@ -75,6 +84,7 @@ fun ProcessoDetalheScreen(
     )
     val estado by viewModel.uiState.collectAsState()
     var abaSelecionada by remember { mutableIntStateOf(0) }
+    val onDesignar: (String?) -> Unit = { novoResponsavelId -> viewModel.designar(novoResponsavelId) }
 
     Scaffold(
         modifier = modifier,
@@ -115,7 +125,7 @@ fun ProcessoDetalheScreen(
             }
 
             when (abaSelecionada) {
-                0 -> AbaDadosGerais(estado, onAvancarFaseClick)
+                0 -> AbaDadosGerais(estado, onAvancarFaseClick, onDesignar)
                 1 -> AbaItens(estado.itens)
                 2 -> AbaTimeline(estado.historico)
                 else -> AbaAnexos()
@@ -125,8 +135,14 @@ fun ProcessoDetalheScreen(
 }
 
 @Composable
-private fun AbaDadosGerais(estado: ProcessoDetalheUiState, onAvancarFaseClick: () -> Unit) {
+private fun AbaDadosGerais(
+    estado: ProcessoDetalheUiState,
+    onAvancarFaseClick: () -> Unit,
+    onDesignar: (String?) -> Unit
+) {
     val processo = estado.processo ?: return
+    var mostrarDialogoDesignar by remember { mutableStateOf(false) }
+
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -145,14 +161,63 @@ private fun AbaDadosGerais(estado: ProcessoDetalheUiState, onAvancarFaseClick: (
         if (processo.tipoProcessoId.isNotBlank()) CampoDado("Tipo", processo.tipoProcessoId)
         CampoDado("Valor estimado total", "R$ %.2f".format(processo.valorEstimadoTotal))
         CampoDado("Data de abertura", processo.dataAbertura.format(formatoData))
+        if (estado.tipoProcessoNome.isNotBlank()) CampoDado("Tipo de processo", estado.tipoProcessoNome)
+        CampoDado("Designado a", estado.designadoParaNome ?: "Ninguém (órfão)")
+        if (estado.designadoPorNome != null) CampoDado("Designado por", estado.designadoPorNome)
 
-        PillButton(
-            text = "Avançar fase",
-            onClick = onAvancarFaseClick,
-            containerColor = MaterialTheme.colorScheme.primary,
-            contentColor = MaterialTheme.colorScheme.onPrimary,
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-        )
+        Row(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Column {
+                Text("Designação", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SemaforoPill(status = estado.statusSemaforoDesignacao)
+            }
+        }
+
+        when (estado.acaoDesignacao) {
+            AcaoDesignacao.DESIGNAR -> PillButton(
+                text = "Designar",
+                onClick = { mostrarDialogoDesignar = true },
+                containerColor = MaterialTheme.colorScheme.secondary,
+                contentColor = MaterialTheme.colorScheme.onSecondary,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            )
+            AcaoDesignacao.ASSUMIR -> PillButton(
+                text = "Assumir processo",
+                onClick = { onDesignar(SupabaseSessionManager.perfilAtual?.id) },
+                containerColor = MaterialTheme.colorScheme.secondary,
+                contentColor = MaterialTheme.colorScheme.onSecondary,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            )
+            AcaoDesignacao.DEVOLVER -> PillButton(
+                text = "Devolver processo",
+                onClick = { onDesignar(null) },
+                containerColor = MaterialTheme.colorScheme.secondary,
+                contentColor = MaterialTheme.colorScheme.onSecondary,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            )
+            AcaoDesignacao.NENHUMA -> {}
+        }
+
+        if (estado.podeEditar) {
+            PillButton(
+                text = "Avançar fase",
+                onClick = onAvancarFaseClick,
+                containerColor = MaterialTheme.colorScheme.primary,
+                contentColor = MaterialTheme.colorScheme.onPrimary,
+                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+            )
+        }
+
+        if (mostrarDialogoDesignar) {
+            DesignarDialog(
+                perfis = estado.perfisAtivos,
+                designacaoAtualId = estado.processo?.responsavelId,
+                onDismiss = { mostrarDialogoDesignar = false },
+                onConfirmar = { escolhaId ->
+                    onDesignar(escolhaId)
+                    mostrarDialogoDesignar = false
+                }
+            )
+        }
     }
 }
 
@@ -268,4 +333,62 @@ private fun EstadoVazio(texto: String) {
     Box(modifier = Modifier.fillMaxSize().padding(32.dp), contentAlignment = Alignment.Center) {
         Text(texto, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
     }
+}
+
+/**
+ * Lista simples em vez de DropdownField: um ExposedDropdownMenu (baseado em
+ * Popup) dentro de um AlertDialog (outra janela) não posiciona/renderiza
+ * corretamente — mesmo bug conhecido documentado em FaseDestinoDialog
+ * (AvancarFaseScreen.kt).
+ */
+@Composable
+private fun DesignarDialog(
+    perfis: List<PerfilEntity>,
+    designacaoAtualId: String?,
+    onDismiss: () -> Unit,
+    onConfirmar: (novoResponsavelId: String?) -> Unit
+) {
+    var escolhaId by remember { mutableStateOf(designacaoAtualId) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Designar processo") },
+        text = {
+            Column(modifier = Modifier.fillMaxWidth()) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .selectable(
+                            selected = escolhaId == null,
+                            onClick = { escolhaId = null }
+                        )
+                        .padding(horizontal = 12.dp, vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    RadioButton(selected = escolhaId == null, onClick = { escolhaId = null })
+                    Text("Ninguém (tornar órfão)")
+                }
+                perfis.forEach { perfil ->
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .selectable(
+                                selected = escolhaId == perfil.id,
+                                onClick = { escolhaId = perfil.id }
+                            )
+                            .padding(horizontal = 12.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        RadioButton(selected = escolhaId == perfil.id, onClick = { escolhaId = perfil.id })
+                        Text(perfil.nome)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirmar(escolhaId) }) { Text("Confirmar") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
 }
