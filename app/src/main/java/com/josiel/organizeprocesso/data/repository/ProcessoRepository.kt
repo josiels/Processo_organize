@@ -119,7 +119,13 @@ class ProcessoRepository(
                 put("quantidade", item.quantidade)
                 put("unidade", item.unidade)
                 put("valor_estimado_unit", item.valorEstimadoUnit)
-                item.valorPesquisaUnit?.let { put("valor_pesquisa_unit", it) }
+                // Sempre inclui a chave, mesmo quando null: upsert do Postgrest só
+                // toca colunas presentes no payload — omitir a chave deixaria um
+                // valor antigo intacto no servidor em vez de limpá-lo (bug real
+                // encontrado em revisão: usuário zera valorPesquisaUnit, o campo
+                // ausente não limpa a coluna, e a reconciliação abaixo reescreve o
+                // valor obsoleto de volta no cache local).
+                put("valor_pesquisa_unit", item.valorPesquisaUnit)
             }
             client.postgrest["itens"].upsert(linhaItem)
         }
