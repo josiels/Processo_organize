@@ -32,6 +32,7 @@ import com.josiel.organizeprocesso.ui.agenda.AgendaScreen
 import com.josiel.organizeprocesso.ui.auth.LoginScreen
 import com.josiel.organizeprocesso.ui.cadastro.FasesScreen
 import com.josiel.organizeprocesso.ui.cadastro.MaisScreen
+import com.josiel.organizeprocesso.ui.cadastro.TiposProcessoScreen
 import com.josiel.organizeprocesso.ui.inicio.InicioScreen
 import com.josiel.organizeprocesso.ui.processos.AvancarFaseScreen
 import com.josiel.organizeprocesso.ui.processos.ProcessoDetalheScreen
@@ -127,6 +128,7 @@ fun AppNavHost() {
             composable<Mais> {
                 MaisScreen(
                     onCadastroFasesClick = { navController.navigate(CadastroFases) },
+                    onCadastroTiposProcessoClick = { navController.navigate(CadastroTiposProcesso) },
                     onSairClick = {
                         coroutineScope.launch {
                             // Ordem importa: encerra sessão/realtime antes de limpar o
@@ -145,6 +147,10 @@ fun AppNavHost() {
 
             composable<CadastroFases> {
                 FasesScreen(onBackClick = { navController.navigateUp() })
+            }
+
+            composable<CadastroTiposProcesso> {
+                TiposProcessoScreen(onBackClick = { navController.navigateUp() })
             }
 
             composable<ProcessoDetalhe> { entry ->

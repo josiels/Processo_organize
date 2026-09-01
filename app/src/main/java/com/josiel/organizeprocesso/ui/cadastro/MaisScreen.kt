@@ -11,6 +11,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
+import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.DateRange
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Refresh
@@ -24,6 +25,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
+import com.josiel.organizeprocesso.domain.model.Papel
 import com.josiel.organizeprocesso.ui.components.IconCircle
 import com.josiel.organizeprocesso.ui.components.NavigationChevron
 import com.josiel.organizeprocesso.ui.theme.Indigo600
@@ -40,11 +43,14 @@ private data class OpcaoMais(
 @Composable
 fun MaisScreen(
     onCadastroFasesClick: () -> Unit,
+    onCadastroTiposProcessoClick: () -> Unit,
     onSairClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val ehAdmin = SupabaseSessionManager.perfilAtual?.papel == Papel.ADMIN
     val opcoes = listOf(
-        OpcaoMais("Cadastro de Fases", Icons.Filled.DateRange, habilitado = true, onClick = onCadastroFasesClick),
+        OpcaoMais("Cadastro de Fases", Icons.Filled.DateRange, habilitado = ehAdmin, onClick = onCadastroFasesClick),
+        OpcaoMais("Cadastro de Tipos de Processo", Icons.AutoMirrored.Filled.List, habilitado = ehAdmin, onClick = onCadastroTiposProcessoClick),
         OpcaoMais("Status de sincronização", Icons.Filled.Refresh, habilitado = false) {},
         OpcaoMais("Configurações", Icons.Filled.Settings, habilitado = false) {},
         OpcaoMais("Sair", Icons.AutoMirrored.Filled.ExitToApp, habilitado = true, onClick = onSairClick)

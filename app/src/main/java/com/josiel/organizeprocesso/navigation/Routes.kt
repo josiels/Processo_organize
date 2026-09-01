@@ -32,3 +32,6 @@ data class ProcessoForm(val processoId: String? = null)
 // Rotas empilhadas a partir da aba Mais.
 @Serializable
 object CadastroFases
+
+@Serializable
+object CadastroTiposProcesso
