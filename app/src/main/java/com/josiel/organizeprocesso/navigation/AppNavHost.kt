@@ -6,7 +6,10 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.navigation.NavDestination.Companion.hasRoute
@@ -18,7 +21,12 @@ import androidx.navigation.compose.rememberNavController
 import androidx.navigation.toRoute
 import com.josiel.organizeprocesso.data.local.AppDatabase
 import com.josiel.organizeprocesso.data.remote.RealtimeSyncManager
+import com.josiel.organizeprocesso.data.remote.RepositoriosSincronizaveis
 import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
+import com.josiel.organizeprocesso.data.repository.FaseRepository
+import com.josiel.organizeprocesso.data.repository.PerfilRepository
+import com.josiel.organizeprocesso.data.repository.ProcessoRepository
+import com.josiel.organizeprocesso.data.repository.TipoProcessoRepository
 import io.github.jan.supabase.auth.status.SessionStatus
 import com.josiel.organizeprocesso.ui.agenda.AgendaScreen
 import com.josiel.organizeprocesso.ui.auth.LoginScreen
@@ -48,6 +56,13 @@ fun AppNavHost() {
     val context = LocalContext.current
     val coroutineScope = rememberCoroutineScope()
 
+    val database = remember { AppDatabase.getInstance(context) }
+    val perfilRepository = remember { PerfilRepository(database.perfilDao(), SupabaseSessionManager.client) }
+    val tipoProcessoRepository = remember { TipoProcessoRepository(database.tipoProcessoDao(), SupabaseSessionManager.client) }
+    val faseRepository = remember { FaseRepository(database.faseDao(), SupabaseSessionManager.client) }
+    val processoRepository = remember { ProcessoRepository(database, SupabaseSessionManager.client) }
+    var sincronizacaoIniciada by remember { mutableStateOf(false) }
+
     LaunchedEffect(sessionStatus) {
         val autenticado = sessionStatus is SessionStatus.Authenticated
         val emLogin = currentDestination?.hierarchy?.any { it.hasRoute(Login::class) } == true
@@ -55,6 +70,26 @@ fun AppNavHost() {
             navController.navigate(Inicio) { popUpTo(Login) { inclusive = true } }
         } else if (!autenticado && !emLogin) {
             navController.navigate(Login) { popUpTo(0) { inclusive = true } }
+        }
+
+        if (autenticado && !sincronizacaoIniciada) {
+            sincronizacaoIniciada = true
+            perfilRepository.sincronizar()
+            tipoProcessoRepository.sincronizar()
+            faseRepository.sincronizar()
+            processoRepository.sincronizar()
+            RealtimeSyncManager.iniciar(
+                client = SupabaseSessionManager.client,
+                escopo = coroutineScope,
+                repositorios = RepositoriosSincronizaveis(
+                    perfis = perfilRepository::sincronizar,
+                    tiposProcesso = tipoProcessoRepository::sincronizar,
+                    fases = faseRepository::sincronizar,
+                    processos = processoRepository::sincronizar
+                )
+            )
+        } else if (!autenticado) {
+            sincronizacaoIniciada = false
         }
     }
 
