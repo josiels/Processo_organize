@@ -15,9 +15,10 @@ import androidx.room.TypeConverters
         ProcessoFaseHistoricoEntity::class,
         ObservacaoVersaoEntity::class,
         ItemEntity::class,
-        AnexoLinkEntity::class
+        AnexoLinkEntity::class,
+        DiligenciaEntity::class
     ],
-    version = 2,
+    version = 3,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
@@ -30,6 +31,7 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun observacaoVersaoDao(): ObservacaoVersaoDao
     abstract fun itemDao(): ItemDao
     abstract fun anexoLinkDao(): AnexoLinkDao
+    abstract fun diligenciaDao(): DiligenciaDao
 
     companion object {
         @Volatile
