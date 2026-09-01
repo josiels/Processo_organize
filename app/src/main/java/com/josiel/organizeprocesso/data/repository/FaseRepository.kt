@@ -37,7 +37,12 @@ class FaseRepository(
             put("organizacao_id", organizacaoId)
             put("nome", nome)
             put("ordem", ordem)
-            descricao?.takeIf { it.isNotBlank() }?.let { put("descricao", it) }
+            // Sempre inclui a chave, mesmo quando null: upsert do Postgrest só
+            // toca colunas presentes no payload — omitir a chave deixaria um
+            // valor antigo intacto no servidor em vez de limpá-lo (mesmo bug
+            // corrigido em ProcessoRepository.atualizar(), Task 5, e em
+            // ItemRepository.salvar(), Task 6).
+            put("descricao", descricao?.takeIf { it.isNotBlank() })
             put("dias_alerta_atencao", diasAlertaAtencao)
             put("dias_alerta_critico", diasAlertaCritico)
         }
