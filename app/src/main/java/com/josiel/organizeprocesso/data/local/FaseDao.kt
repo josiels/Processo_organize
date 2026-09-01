@@ -11,6 +11,9 @@ interface FaseDao {
     @Upsert
     suspend fun upsert(fase: FaseEntity)
 
+    @Upsert
+    suspend fun upsertTodos(fases: List<FaseEntity>)
+
     @Delete
     suspend fun delete(fase: FaseEntity)
 
