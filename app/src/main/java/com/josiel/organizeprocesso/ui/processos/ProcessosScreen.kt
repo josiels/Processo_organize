@@ -35,10 +35,13 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
 import com.josiel.organizeprocesso.domain.model.StatusGeralProcesso
+import com.josiel.organizeprocesso.domain.usecase.podeCriarProcesso
 import com.josiel.organizeprocesso.ui.components.FasePill
 import com.josiel.organizeprocesso.ui.components.NavigationChevron
 import com.josiel.organizeprocesso.ui.components.PillButton
+import com.josiel.organizeprocesso.ui.components.SemaforoPill
 import com.josiel.organizeprocesso.ui.components.SideBarCard
 import com.josiel.organizeprocesso.domain.model.StatusSemaforo
 import com.josiel.organizeprocesso.ui.theme.AmareloAtencao
@@ -68,6 +71,7 @@ fun ProcessosScreen(
     viewModel: ProcessoListViewModel = viewModel()
 ) {
     val itens by viewModel.itens.collectAsState()
+    val podeCriar = SupabaseSessionManager.perfilAtual?.papel?.let(::podeCriarProcesso) ?: false
     var busca by remember { mutableStateOf("") }
     var filtro by remember { mutableStateOf(FiltroProcesso.TODOS) }
     var ordenacao by remember { mutableStateOf(OrdenacaoProcesso.URGENCIA) }
@@ -168,13 +172,15 @@ fun ProcessosScreen(
             }
         }
 
-        PillButton(
-            text = "+ Novo processo",
-            onClick = onNovoProcessoClick,
-            containerColor = MaterialTheme.colorScheme.secondary,
-            contentColor = MaterialTheme.colorScheme.onSecondary,
-            modifier = Modifier.fillMaxWidth().padding(16.dp)
-        )
+        if (podeCriar) {
+            PillButton(
+                text = "+ Novo processo",
+                onClick = onNovoProcessoClick,
+                containerColor = MaterialTheme.colorScheme.secondary,
+                contentColor = MaterialTheme.colorScheme.onSecondary,
+                modifier = Modifier.fillMaxWidth().padding(16.dp)
+            )
+        }
     }
 }
 
@@ -205,12 +211,20 @@ private fun ProcessoCard(item: ProcessoListItem, onClick: () -> Unit) {
                 style = MaterialTheme.typography.bodyMedium,
                 maxLines = 1
             )
-            if (item.responsavelNome != null) {
-                Text(
-                    "Responsável: ${item.responsavelNome}",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
+            Text(
+                "Responsável: ${item.responsavelNome}",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(top = 6.dp)) {
+                Column {
+                    Text("Fase", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SemaforoPill(status = item.statusSemaforo)
+                }
+                Column {
+                    Text("Designação", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    SemaforoPill(status = item.statusSemaforoDesignacao)
+                }
             }
         }
         NavigationChevron()
