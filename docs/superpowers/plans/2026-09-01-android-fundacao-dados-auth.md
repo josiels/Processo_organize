@@ -1546,6 +1546,11 @@ git commit -m "feat: RealtimeSyncManager subscribes to org-scoped tables"
 - Modify: `app/src/main/java/com/josiel/organizeprocesso/ui/processos/ProcessoDetalheViewModel.kt`
 - Modify: `app/src/main/java/com/josiel/organizeprocesso/ui/processos/AvancarFaseViewModel.kt`
 - Modify: `app/src/main/java/com/josiel/organizeprocesso/ui/cadastro/FaseCadastroViewModel.kt`
+- Modify: `app/src/main/java/com/josiel/organizeprocesso/data/repository/HistoricoFaseRepository.kt`
+- Modify: `app/src/main/java/com/josiel/organizeprocesso/ui/cadastro/FasesScreen.kt`
+- Modify: `app/src/main/java/com/josiel/organizeprocesso/ui/processos/ProcessoDetalheScreen.kt`
+
+**Ruling adicionada durante a execução deste plano (Task 6 fez uma verificação de build limpo — `--rerun-tasks` — e descobriu que a compilação incremental do Gradle não reportava 4 arquivos que já estavam quebrados desde a Task 2, mascarados pelo cache de compilação incremental do Kotlin):** os três arquivos acima entram na lista desta task pelo mesmo motivo dos outros — referenciam campos/entidades removidos na Task 2 (`ProcessoFaseHistoricoEntity`/`ObservacaoVersaoEntity` com `updatedAt`/`synced`/`deviceOrigin`; `FaseEntity.padrao`; `ProcessoEntity.tipo`) e precisam do mesmo tratamento "só o suficiente para compilar" descrito abaixo — não uma reescrita de `HistoricoFaseRepository`/`AvancarFaseScreen` de verdade, que continua sendo escopo do Plano 2B.
 
 **Interfaces:**
 - Consumes: `SupabaseSessionManager` (Task 3), `RealtimeSyncManager` (Task 7), os repositórios reescritos (Tasks 4-6).
@@ -1837,22 +1842,32 @@ Specifically in `ProcessoFormViewModel.kt`, the call site for `processoRepositor
 
 In `app/src/main/java/com/josiel/organizeprocesso/ui/cadastro/FaseCadastroViewModel.kt`: replace the `FaseRepository(database.faseDao(), deviceId)` construction with `FaseRepository(database.faseDao(), SupabaseSessionManager.client)`, remove the `DeviceId.obter(application)` line and its import, add the `SupabaseSessionManager` import. If the file calls `faseRepository.salvar(...)` with the old parameter list (no `organizacaoId`), add `organizacaoId = SupabaseSessionManager.perfilAtual?.organizacaoId.orEmpty()` as an argument.
 
-- [ ] **Step 9: Verificar que o projeto compila por completo**
+- [ ] **Step 9: Ajustar `HistoricoFaseRepository`, `FasesScreen` e `ProcessoDetalheScreen`**
+
+In `app/src/main/java/com/josiel/organizeprocesso/data/repository/HistoricoFaseRepository.kt`: every `.copy(...)`/constructor call for `ProcessoFaseHistoricoEntity`/`ObservacaoVersaoEntity` still passes the named arguments `updatedAt = ...`, `synced = ...`, `deviceOrigin = ...`, all removed from those entities in Task 2 — remove all three named arguments from every such call site in this file (there are four call sites: two inside `salvarEntradaAtual`, two inside `mudarFase`). Do not otherwise change this file's logic — it still does local-only Room writes for now (its real rewrite to call the `avancar_fase()`/`designar_processo()` backend RPCs is Plano 2B's job, not this task's).
+
+In `app/src/main/java/com/josiel/organizeprocesso/ui/cadastro/FasesScreen.kt`, line ~127: this screen reads `.padrao` from a `FaseEntity` (removed in Task 2) — remove whatever UI element displays/uses this field (likely a badge or checkbox indicating "fase padrão"). If removing it leaves an empty `if`/conditional branch, remove that too. This is a visual regression accepted for this task (per the same "compiles, doesn't need to look right yet" standard already set for the ViewModels in Steps 7-8) — Plano 2B can decide whether "fase padrão" as a concept comes back in some form.
+
+In `app/src/main/java/com/josiel/organizeprocesso/ui/processos/ProcessoDetalheScreen.kt`, line ~145: this screen reads `.tipo` from a `ProcessoEntity` twice (removed in Task 2, replaced by `.tipoProcessoId`) — replace both occurrences with `.tipoProcessoId`. As already noted for the ViewModels in Step 7, this will display a raw id instead of a readable type name until Plano 2B adds the real tipo-de-processo lookup/display — that's expected and acceptable for this task.
+
+- [ ] **Step 10: Verificar que o projeto compila por completo (build limpo)**
 
 Run:
 ```powershell
 $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-.\gradlew.bat :app:compileDebugKotlin
+.\gradlew.bat :app:compileDebugKotlin --rerun-tasks
 ```
-Expected: `BUILD SUCCESSFUL`. Se algo ainda não compilar, é um lugar que este step não previu — resolva mecanicamente seguindo o mesmo padrão de substituição do Step 7 (nunca invente uma nova regra de negócio para "fazer compilar"; se um erro exigir uma decisão de design real, pare e reporte em vez de adivinhar).
+Expected: `BUILD SUCCESSFUL`. **Use `--rerun-tasks` here specifically** (not a plain incremental `compileDebugKotlin`) — a Task 6 diligence check found that Gradle/Kotlin's incremental compilation can silently omit reporting errors in files that were not pulled into that particular build's affected-file set, even though those files would fail a real build. A plain incremental compile passing is not trustworthy evidence that the WHOLE project compiles; `--rerun-tasks` forces a full, honest recompilation. If it still fails anywhere, that's a place this plan didn't anticipate — resolve it mechanically following the same substitution patterns already used in this task (never invent a new business rule to "make it compile"; if an error requires a real design decision, stop and report instead of guessing).
 
-- [ ] **Step 10: Commit**
+- [ ] **Step 11: Commit**
 
 ```bash
 git add app/src/main/java/com/josiel/organizeprocesso/ui/auth
 git add app/src/main/java/com/josiel/organizeprocesso/navigation
 git add app/src/main/java/com/josiel/organizeprocesso/ui/cadastro/MaisScreen.kt
+git add app/src/main/java/com/josiel/organizeprocesso/ui/cadastro/FasesScreen.kt
 git add app/src/main/java/com/josiel/organizeprocesso/ui/processos
+git add app/src/main/java/com/josiel/organizeprocesso/data/repository/HistoricoFaseRepository.kt
 git add app/src/main/java/com/josiel/organizeprocesso/ui/cadastro/FaseCadastroViewModel.kt
 git commit -m "feat: login screen, auth gate, remove Pessoa UI"
 ```
@@ -1863,13 +1878,13 @@ git commit -m "feat: login screen, auth gate, remove Pessoa UI"
 
 **Files:** nenhum criado — só verificação.
 
-- [ ] **Step 1: Build completo**
+- [ ] **Step 1: Build completo (limpo)**
 
 ```powershell
 $env:JAVA_HOME = "C:\Program Files\Android\Android Studio\jbr"
-.\gradlew.bat :app:compileDebugKotlin
+.\gradlew.bat :app:compileDebugKotlin --rerun-tasks
 ```
-Expected: `BUILD SUCCESSFUL`.
+Expected: `BUILD SUCCESSFUL`. Use `--rerun-tasks` (não incremental) pelo mesmo motivo do Step 10 da Task 8 — só um build forçado do zero é evidência confiável de que o projeto inteiro compila.
 
 - [ ] **Step 2: Suíte de testes unitários completa**
 
