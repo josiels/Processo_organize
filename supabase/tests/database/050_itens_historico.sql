@@ -1,5 +1,5 @@
 begin;
-select plan(6);
+select plan(9);
 
 select has_table('public', 'itens', 'itens table should exist');
 select has_table('public', 'processo_fase_historico', 'processo_fase_historico table should exist');
@@ -55,6 +55,27 @@ select results_eq(
   array['Notebook'],
   'A colleague in the same organization can read itens for transparency, even though it is not theirs'
 );
+
+-- Same fix, same requirement, but for processo_fase_historico: a same-org
+-- colleague who is neither the owner nor an admin must still be able to
+-- read the historico row.
+select results_eq(
+  $$select count(*)::int from public.processo_fase_historico$$,
+  array[1],
+  'A colleague in the same organization can read processo_fase_historico for transparency, even though it is not theirs'
+);
+
+-- Reads are organization-wide now, but writes must remain admin-or-owner
+-- only. A colleague trying to insert an item into a processo they do not
+-- own must be rejected by the WITH CHECK clause of "itens_acesso" (the
+-- purely-permissive select policy above does not apply to INSERT).
+select throws_ok(
+  $$insert into public.itens (processo_id, descricao, quantidade, unidade, valor_estimado_unit)
+    values ('40000000-0000-0000-0000-000000000001', 'Item Rejeitado', 1, 'un', 100)$$,
+  '42501',
+  null,
+  'A colleague in the same organization cannot insert an item into a processo they do not own'
+);
 reset role;
 
 insert into auth.users (id, email, encrypted_password, email_confirmed_at)
@@ -68,6 +89,11 @@ select results_eq(
   $$select descricao from public.itens$$,
   array[]::text[],
   'A user from a different organization sees no itens from Organização A'
+);
+select results_eq(
+  $$select count(*)::int from public.processo_fase_historico$$,
+  array[0],
+  'A user from a different organization sees no processo_fase_historico rows from Organização A'
 );
 reset role;
 
