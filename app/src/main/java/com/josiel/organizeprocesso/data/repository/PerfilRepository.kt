@@ -12,10 +12,10 @@ import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.put
 
 /**
- * Só leitura — criação de perfil é exclusivamente via Edge Function
- * (`criar-conta`/`criar-organizacao`, ver Plano 2C), nunca por este
- * repositório. Espelha `public.perfis` da organização do usuário logado
- * (a RLS do backend já restringe o `select` à própria organização).
+ * Criação de perfil é exclusivamente via Edge Function (nunca por este repositório).
+ * Atualizações devem evitar campos protegidos pela trigger `perfis_proteger_campos`:
+ * `organizacao_id`, `papel`, `ativo`, `ultimo_recebimento_em`.
+ * Espelha `public.perfis` da organização logada (RLS restringe à própria).
  */
 class PerfilRepository(
     private val dao: PerfilDao,
