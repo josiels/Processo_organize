@@ -30,25 +30,32 @@ async function enviarParaTokens(
   processoId: string,
 ) {
   for (const token of tokens) {
-    await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${fcmAccessToken}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        message: {
-          token,
-          notification: { title: titulo, body: corpo },
-          data: { processo_id: processoId },
+    try {
+      await fetch(`https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${fcmAccessToken}`,
+          'Content-Type': 'application/json',
         },
-      }),
-    });
-    // Falha de envio para um token específico (ex: token expirado) não deveria
-    // derrubar o lote inteiro — cada chamada é independente; o FCM responde
-    // por token, não há necessidade de checar o corpo da resposta aqui para
-    // que o restante dos envios continue (fora de escopo tratar tokens
-    // inválidos nesta etapa — ver spec, seção 6, "fora de escopo").
+        body: JSON.stringify({
+          message: {
+            token,
+            notification: { title: titulo, body: corpo },
+            data: { processo_id: processoId },
+          },
+        }),
+      });
+      // Falha de envio para um token específico (ex: token expirado) não deveria
+      // derrubar o lote inteiro — cada chamada é independente; o FCM responde
+      // por token, não há necessidade de checar o corpo da resposta aqui para
+      // que o restante dos envios continue (fora de escopo tratar tokens
+      // inválidos nesta etapa — ver spec, seção 6, "fora de escopo").
+    } catch (err) {
+      // Exceção de rede (DNS, conexão recusada, timeout) no fetch de UM token
+      // não deve interromper o envio para os demais tokens/perfis/gatilhos —
+      // registra e segue para o próximo token.
+      console.error(`Falha de rede ao enviar FCM para token (processo ${processoId}):`, err);
+    }
   }
 }
 
