@@ -48,6 +48,7 @@ supabase-postgrest-kt = { group = "io.github.jan-tennert.supabase", name = "post
 supabase-auth-kt = { group = "io.github.jan-tennert.supabase", name = "auth-kt" }
 supabase-storage-kt = { group = "io.github.jan-tennert.supabase", name = "storage-kt" }
 supabase-realtime-kt = { group = "io.github.jan-tennert.supabase", name = "realtime-kt" }
+supabase-functions-kt = { group = "io.github.jan-tennert.supabase", name = "functions-kt" }
 ktor-client-android = { group = "io.ktor", name = "ktor-client-android", version.ref = "ktor" }
 kotlinx-coroutines-test = { group = "org.jetbrains.kotlinx", name = "kotlinx-coroutines-test", version.ref = "kotlinxCoroutinesTest" }
 mockk = { group = "io.mockk", name = "mockk", version.ref = "mockk" }
