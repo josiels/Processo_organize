@@ -8,6 +8,8 @@ import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import java.time.Instant
 import kotlinx.coroutines.flow.Flow
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
 
 /**
  * Só leitura — criação de perfil é exclusivamente via Edge Function
@@ -24,6 +26,23 @@ class PerfilRepository(
     suspend fun sincronizar() {
         val dtos = client.postgrest["perfis"].select().decodeList<PerfilDto>()
         dao.upsertTodos(dtos.map { it.paraEntity() })
+    }
+
+    suspend fun atualizarPreferenciasNotificacao(
+        perfilId: String,
+        notificarAvancoFase: Boolean,
+        notificarPrazo: Boolean,
+        notificarTempoParado: Boolean
+    ) {
+        val linha = buildJsonObject {
+            put("notificar_avanco_fase", notificarAvancoFase)
+            put("notificar_prazo", notificarPrazo)
+            put("notificar_tempo_parado", notificarTempoParado)
+        }
+        client.postgrest["perfis"].update(linha) {
+            filter { eq("id", perfilId) }
+        }
+        sincronizar()
     }
 }
 
