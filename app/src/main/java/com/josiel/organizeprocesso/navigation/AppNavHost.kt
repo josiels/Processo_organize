@@ -34,6 +34,11 @@ import com.josiel.organizeprocesso.ui.auth.LoginScreen
 import com.josiel.organizeprocesso.ui.cadastro.FasesScreen
 import com.josiel.organizeprocesso.ui.cadastro.MaisScreen
 import com.josiel.organizeprocesso.ui.cadastro.TiposProcessoScreen
+import com.josiel.organizeprocesso.ui.configuracoes.ConfiguracoesScreen
+import com.josiel.organizeprocesso.ui.equipe.CriarContaScreen
+import com.josiel.organizeprocesso.ui.equipe.EquipeScreen
+import com.josiel.organizeprocesso.ui.filadistribuicao.FilaDistribuicaoDetalheScreen
+import com.josiel.organizeprocesso.ui.filadistribuicao.FilaDistribuicaoScreen
 import com.josiel.organizeprocesso.ui.inicio.InicioScreen
 import com.josiel.organizeprocesso.ui.processos.AvancarFaseScreen
 import com.josiel.organizeprocesso.ui.processos.ProcessoDetalheScreen
@@ -160,6 +165,9 @@ fun AppNavHost() {
                 MaisScreen(
                     onCadastroFasesClick = { navController.navigate(CadastroFases) },
                     onCadastroTiposProcessoClick = { navController.navigate(CadastroTiposProcesso) },
+                    onEquipeClick = { navController.navigate(Equipe) },
+                    onFilaDistribuicaoClick = { navController.navigate(FilaDistribuicao) },
+                    onConfiguracoesClick = { navController.navigate(Configuracoes) },
                     onSairClick = {
                         coroutineScope.launch {
                             // Ordem importa: encerra sessão/realtime antes de limpar o
@@ -182,6 +190,40 @@ fun AppNavHost() {
 
             composable<CadastroTiposProcesso> {
                 TiposProcessoScreen(onBackClick = { navController.navigateUp() })
+            }
+
+            composable<Equipe> {
+                EquipeScreen(
+                    onCriarContaClick = { navController.navigate(CriarConta) },
+                    onBackClick = { navController.navigateUp() }
+                )
+            }
+
+            composable<CriarConta> {
+                CriarContaScreen(
+                    onBackClick = { navController.navigateUp() },
+                    onCriado = { navController.navigateUp() }
+                )
+            }
+
+            composable<Configuracoes> {
+                ConfiguracoesScreen(onBackClick = { navController.navigateUp() })
+            }
+
+            composable<FilaDistribuicao> {
+                FilaDistribuicaoScreen(
+                    onPessoaClick = { perfilId, nome -> navController.navigate(FilaDistribuicaoDetalhe(perfilId, nome)) },
+                    onBackClick = { navController.navigateUp() }
+                )
+            }
+
+            composable<FilaDistribuicaoDetalhe> { entry ->
+                val rota = entry.toRoute<FilaDistribuicaoDetalhe>()
+                FilaDistribuicaoDetalheScreen(
+                    perfilId = rota.perfilId,
+                    nomePessoa = rota.nome,
+                    onBackClick = { navController.navigateUp() }
+                )
             }
 
             composable<ProcessoDetalhe> { entry ->

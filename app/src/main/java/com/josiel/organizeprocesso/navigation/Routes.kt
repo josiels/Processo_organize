@@ -35,3 +35,18 @@ object CadastroFases
 
 @Serializable
 object CadastroTiposProcesso
+
+@Serializable
+object Equipe
+
+@Serializable
+object CriarConta
+
+@Serializable
+object Configuracoes
+
+@Serializable
+object FilaDistribuicao
+
+@Serializable
+data class FilaDistribuicaoDetalhe(val perfilId: String, val nome: String)

@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.Card
@@ -46,6 +47,9 @@ private data class OpcaoMais(
 fun MaisScreen(
     onCadastroFasesClick: () -> Unit,
     onCadastroTiposProcessoClick: () -> Unit,
+    onEquipeClick: () -> Unit,
+    onFilaDistribuicaoClick: () -> Unit,
+    onConfiguracoesClick: () -> Unit,
     onSairClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -60,9 +64,11 @@ fun MaisScreen(
         if (ehAdmin) {
             add(OpcaoMais("Cadastro de Fases", Icons.Filled.DateRange, habilitado = true, onClick = onCadastroFasesClick))
             add(OpcaoMais("Cadastro de Tipos de Processo", Icons.AutoMirrored.Filled.List, habilitado = true, onClick = onCadastroTiposProcessoClick))
+            add(OpcaoMais("Equipe", Icons.Filled.Person, habilitado = true, onClick = onEquipeClick))
         }
+        add(OpcaoMais("Fila de Distribuição", Icons.AutoMirrored.Filled.List, habilitado = true, onClick = onFilaDistribuicaoClick))
         add(OpcaoMais("Status de sincronização", Icons.Filled.Refresh, habilitado = false) {})
-        add(OpcaoMais("Configurações", Icons.Filled.Settings, habilitado = false) {})
+        add(OpcaoMais("Configurações", Icons.Filled.Settings, habilitado = true, onClick = onConfiguracoesClick))
         add(OpcaoMais("Sair", Icons.AutoMirrored.Filled.ExitToApp, habilitado = true, onClick = onSairClick))
     }
 
