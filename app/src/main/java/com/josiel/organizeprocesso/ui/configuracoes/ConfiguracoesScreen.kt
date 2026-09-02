@@ -66,6 +66,15 @@ fun ConfiguracoesScreen(
             }
             return@Scaffold
         }
+        if (estado.bloqueado) {
+            Box(modifier = Modifier.padding(innerPadding).fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text(
+                    estado.erro ?: "Não foi possível carregar suas preferências.",
+                    color = MaterialTheme.colorScheme.error
+                )
+            }
+            return@Scaffold
+        }
         Column(
             modifier = Modifier.padding(innerPadding).fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)
