@@ -150,8 +150,16 @@ fun AppNavHost(
         }
     }
 
-    LaunchedEffect(processoIdDeepLink) {
-        if (processoIdDeepLink != null) {
+    LaunchedEffect(processoIdDeepLink, sessionStatus) {
+        // Chaveado também em sessionStatus: se o deep-link chegar antes do
+        // login terminar, este efeito não consome nada agora — ele volta a
+        // rodar quando sessionStatus virar Authenticated (mesma instância de
+        // processoIdDeepLink, chave diferente), e só então navega. Sem isso,
+        // um deep-link em cold start é perdido silenciosamente (achado da
+        // revisão final do Plano 2D).
+        val autenticado = sessionStatus is SessionStatus.Authenticated &&
+            SupabaseSessionManager.perfilAtual.value != null
+        if (processoIdDeepLink != null && autenticado) {
             navController.navigate(ProcessoDetalhe(processoIdDeepLink))
             onDeepLinkConsumido()
         }
@@ -189,6 +197,24 @@ fun AppNavHost(
                     onConfiguracoesClick = { navController.navigate(Configuracoes) },
                     onSairClick = {
                         coroutineScope.launch {
+                            // Remove o token deste aparelho ANTES de encerrar a sessão
+                            // (a policy device_tokens_dono exige auth.uid() válido) —
+                            // mesmo risco de vazamento entre usuários do clearAllTables
+                            // abaixo (spec do pivô, seção 2.6), agora também coberto
+                            // para as notificações push.
+                            val perfilId = SupabaseSessionManager.perfilAtual.value?.id
+                            if (perfilId != null) {
+                                try {
+                                    val token = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
+                                    deviceTokenRepository.removerDoAparelhoAtual(perfilId, token)
+                                } catch (e: Exception) {
+                                    if (e is CancellationException) {
+                                        throw e
+                                    }
+                                    // Sem rede/Firebase: a linha antiga fica, mas não
+                                    // trava o logout — não é uma falha acionável aqui.
+                                }
+                            }
                             // Ordem importa: encerra sessão/realtime antes de limpar o
                             // cache local, para não deixar dados de uma organização
                             // visíveis a quem logar em seguida no mesmo aparelho
