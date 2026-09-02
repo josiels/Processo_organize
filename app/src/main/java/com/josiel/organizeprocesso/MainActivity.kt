@@ -17,4 +17,8 @@ class MainActivity : ComponentActivity() {
             }
         }
     }
+
+    companion object {
+        const val EXTRA_PROCESSO_ID_DEEP_LINK = "extra_processo_id_deep_link"
+    }
 }
