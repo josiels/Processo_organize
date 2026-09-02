@@ -23,6 +23,7 @@ import com.josiel.organizeprocesso.data.local.AppDatabase
 import com.josiel.organizeprocesso.data.remote.RealtimeSyncManager
 import com.josiel.organizeprocesso.data.remote.RepositoriosSincronizaveis
 import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
+import com.josiel.organizeprocesso.data.repository.DeviceTokenRepository
 import com.josiel.organizeprocesso.data.repository.FaseRepository
 import com.josiel.organizeprocesso.data.repository.HistoricoFaseRepository
 import com.josiel.organizeprocesso.data.repository.PerfilRepository
@@ -47,13 +48,17 @@ import com.josiel.organizeprocesso.ui.processos.ProcessosScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 private val abasComBottomBar = listOf(Inicio::class, Processos::class, Agenda::class, Mais::class)
 
 /** Grafo de navegação do app: gate de login, depois bottom nav de 4 abas + rotas empilhadas. */
 @Composable
-fun AppNavHost() {
+fun AppNavHost(
+    processoIdDeepLink: String? = null,
+    onDeepLinkConsumido: () -> Unit = {}
+) {
     val navController = rememberNavController()
     val backStackEntry by navController.currentBackStackEntryAsState()
     val currentDestination = backStackEntry?.destination
@@ -70,6 +75,7 @@ fun AppNavHost() {
     val faseRepository = remember { FaseRepository(database.faseDao(), SupabaseSessionManager.client) }
     val processoRepository = remember { ProcessoRepository(database, SupabaseSessionManager.client) }
     val historicoFaseRepository = remember { HistoricoFaseRepository(database, SupabaseSessionManager.client) }
+    val deviceTokenRepository = remember { DeviceTokenRepository(SupabaseSessionManager.client) }
     var sincronizacaoIniciada by remember { mutableStateOf(false) }
 
     LaunchedEffect(sessionStatus) {
@@ -83,12 +89,18 @@ fun AppNavHost() {
         if (autenticado && SupabaseSessionManager.perfilAtual.value == null) {
             try {
                 SupabaseSessionManager.carregarPerfilAtual()
+                val perfilId = SupabaseSessionManager.perfilAtual.value?.id
+                if (perfilId != null) {
+                    val token = com.google.firebase.messaging.FirebaseMessaging.getInstance().token.await()
+                    deviceTokenRepository.registrar(perfilId, token)
+                }
             } catch (e: Exception) {
                 if (e is CancellationException) {
                     throw e
                 }
-                // Sem rede: segue para o app (em modo restrito); a próxima
-                // transição de sessão tenta carregar de novo.
+                // Sem rede, ou sem Firebase configurado (placeholder): segue para o
+                // app mesmo assim — onNewToken tenta de novo mais tarde, e o app
+                // funciona normalmente sem push.
             }
         }
 
@@ -135,6 +147,13 @@ fun AppNavHost() {
             }
         } else if (!autenticado) {
             sincronizacaoIniciada = false
+        }
+    }
+
+    LaunchedEffect(processoIdDeepLink) {
+        if (processoIdDeepLink != null) {
+            navController.navigate(ProcessoDetalhe(processoIdDeepLink))
+            onDeepLinkConsumido()
         }
     }
 

@@ -78,6 +78,7 @@ dependencies {
 
     // Coroutines
     implementation(libs.kotlinx.coroutines.android)
+    implementation(libs.kotlinx.coroutines.play.services)
 
     // Serialização (DTOs Supabase)
     implementation(libs.kotlinx.serialization.json)
