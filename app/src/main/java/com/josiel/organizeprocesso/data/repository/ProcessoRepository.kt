@@ -68,6 +68,23 @@ class ProcessoRepository(
         }
         client.postgrest["processos"].insert(linhaProcesso)
 
+        // Todo processo corrente precisa de uma linha de processo_fase_historico
+        // (ARQUITETURA.md, seção 4) — sem isso, AvancarFaseScreen fica presa em
+        // "carregando" para sempre (depende de historicoAtual != null), a aba
+        // Timeline nunca aparece, e o semáforo de fase não tem data de entrada
+        // para comparar. Faltava desde a reescrita para Postgrest do Plano 2A —
+        // real bug encontrado durante o levantamento do Plano 2D, corrigido aqui
+        // porque afeta todo processo criado, não só o que 2D vai tocar.
+        val linhaHistorico = buildJsonObject {
+            put("id", UUID.randomUUID().toString())
+            put("processo_id", processoId)
+            put("fase_id", faseInicialId)
+            put("data_entrada", dataAbertura.toString())
+            put("observacoes", "")
+            put("notificar_prazo", false)
+        }
+        client.postgrest["processo_fase_historico"].insert(linhaHistorico)
+
         if (itens.isNotEmpty()) {
             val linhasItens = itens.map { item ->
                 buildJsonObject {
