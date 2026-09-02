@@ -33,6 +33,7 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.josiel.organizeprocesso.domain.model.FilaDistribuicaoItem
 import com.josiel.organizeprocesso.ui.components.NavigationChevron
+import com.josiel.organizeprocesso.ui.components.PillButton
 import com.josiel.organizeprocesso.ui.components.SideBarCard
 import com.josiel.organizeprocesso.ui.components.StatusPill
 import com.josiel.organizeprocesso.ui.theme.Indigo600
@@ -78,7 +79,13 @@ fun FilaDistribuicaoScreen(
                 CircularProgressIndicator()
             }
             estado.erro != null -> Box(modifier = Modifier.padding(innerPadding).fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(estado.erro!!, color = MaterialTheme.colorScheme.error)
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    Text(estado.erro!!, color = MaterialTheme.colorScheme.error)
+                    PillButton(text = "Tentar novamente", onClick = viewModel::carregar)
+                }
             }
             estado.itens.isEmpty() -> Box(modifier = Modifier.padding(innerPadding).fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(
