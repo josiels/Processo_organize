@@ -10,6 +10,7 @@ plugins {
     alias(libs.plugins.kotlin.compose)
     alias(libs.plugins.kotlin.serialization)
     alias(libs.plugins.ksp)
+    alias(libs.plugins.google.services)
 }
 
 android {
@@ -88,6 +89,10 @@ dependencies {
     implementation(libs.supabase.storage.kt)
     implementation(libs.supabase.realtime.kt)
     implementation(libs.supabase.functions.kt)
+
+    // Firebase Cloud Messaging (push)
+    implementation(platform(libs.firebase.bom))
+    implementation(libs.firebase.messaging)
     implementation(libs.ktor.client.android)
 
     testImplementation(libs.junit)
