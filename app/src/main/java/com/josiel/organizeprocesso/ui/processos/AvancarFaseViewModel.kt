@@ -51,6 +51,8 @@ data class AvancarFaseUiState(
     val notificarPrazo: Boolean = false,
     val podeEditar: Boolean = false,
     val salvando: Boolean = false,
+    val salvandoEntrada: Boolean = false,
+    val registrandoDiligencia: Boolean = false,
     val erro: String? = null
 )
 
@@ -157,8 +159,12 @@ class AvancarFaseViewModel(
 
     fun salvarEntradaAtual() {
         val estado = _uiState.value
-        if (!estado.podeEditar) return
+        if (!estado.podeEditar || estado.salvandoEntrada) return
         val historico = estado.historicoAtual ?: return
+        // Síncrono, antes do launch: mesmo guard de mudarFase() — evita que um
+        // segundo toque no ícone "Salvar" dispare uma segunda escrita
+        // concorrente sobre a mesma entrada.
+        _uiState.value = estado.copy(salvandoEntrada = true)
         viewModelScope.launch {
             limparErro()
             try {
@@ -174,6 +180,10 @@ class AvancarFaseViewModel(
                     throw e
                 }
                 registrarErro(e)
+            } finally {
+                // Ao contrário de mudarFase(), esta ação não navega para fora
+                // da tela em sucesso — precisa resetar sempre, não só no erro.
+                _uiState.value = _uiState.value.copy(salvandoEntrada = false)
             }
         }
     }
@@ -225,7 +235,13 @@ class AvancarFaseViewModel(
 
     fun registrarDiligencia(conteudo: String) {
         if (conteudo.isBlank()) return
-        val historicoId = _uiState.value.historicoAtual?.id ?: return
+        val estado = _uiState.value
+        if (estado.registrandoDiligencia) return
+        val historicoId = estado.historicoAtual?.id ?: return
+        // Síncrono, antes do launch: o diálogo já fecha na hora (não espera a
+        // rede), então este guard é a única proteção real contra um segundo
+        // toque disparando diligenciaRepository.registrar() de novo.
+        _uiState.value = estado.copy(registrandoDiligencia = true)
         viewModelScope.launch {
             limparErro()
             try {
@@ -235,6 +251,8 @@ class AvancarFaseViewModel(
                     throw e
                 }
                 registrarErro(e)
+            } finally {
+                _uiState.value = _uiState.value.copy(registrandoDiligencia = false)
             }
         }
     }

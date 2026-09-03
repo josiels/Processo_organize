@@ -92,7 +92,7 @@ fun AvancarFaseScreen(
                 },
                 actions = {
                     IconButton(
-                        enabled = estado.historicoAtual != null && estado.podeEditar,
+                        enabled = estado.historicoAtual != null && estado.podeEditar && !estado.salvandoEntrada,
                         onClick = { viewModel.salvarEntradaAtual() }
                     ) {
                         Icon(Icons.Filled.Check, contentDescription = "Salvar")
@@ -266,6 +266,7 @@ fun AvancarFaseScreen(
 
     if (mostrarDialogoDiligencia) {
         RegistrarDiligenciaDialog(
+            registrando = estado.registrandoDiligencia,
             onDismiss = { mostrarDialogoDiligencia = false },
             onConfirmar = { conteudo ->
                 viewModel.registrarDiligencia(conteudo)
@@ -356,6 +357,7 @@ private val formatoDataHora = DateTimeFormatter.ofPattern("dd/MM/yyyy HH:mm")
 
 @Composable
 private fun RegistrarDiligenciaDialog(
+    registrando: Boolean,
     onDismiss: () -> Unit,
     onConfirmar: (String) -> Unit
 ) {
@@ -373,7 +375,7 @@ private fun RegistrarDiligenciaDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = texto.isNotBlank(),
+                enabled = texto.isNotBlank() && !registrando,
                 onClick = { onConfirmar(texto.trim()) }
             ) { Text("Registrar") }
         },
