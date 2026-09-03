@@ -5,6 +5,7 @@ import io.github.jan.supabase.realtime.PostgresAction
 import io.github.jan.supabase.realtime.RealtimeChannel
 import io.github.jan.supabase.realtime.channel
 import io.github.jan.supabase.realtime.postgresChangeFlow
+import io.github.jan.supabase.realtime.realtime
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.launch
@@ -61,7 +62,7 @@ object RealtimeSyncManager {
             // reusar um tópico que ainda está saindo.
             anteriores.forEach { canal ->
                 try {
-                    canal.unsubscribe()
+                    client.realtime.removeChannel(canal)
                 } catch (e: Exception) {
                     if (e is CancellationException) {
                         throw e
@@ -89,8 +90,8 @@ object RealtimeSyncManager {
         }
     }
 
-    suspend fun encerrar() {
-        canais.forEach { it.unsubscribe() }
+    suspend fun encerrar(client: SupabaseClient) {
+        canais.forEach { client.realtime.removeChannel(it) }
         canais.clear()
     }
 }

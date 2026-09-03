@@ -227,7 +227,7 @@ fun AppNavHost(
                             // visíveis a quem logar em seguida no mesmo aparelho
                             // (spec do pivô, seção 2.6).
                             SupabaseSessionManager.logout()
-                            RealtimeSyncManager.encerrar()
+                            RealtimeSyncManager.encerrar(SupabaseSessionManager.client)
                             withContext(Dispatchers.IO) {
                                 AppDatabase.getInstance(context).clearAllTables()
                             }
