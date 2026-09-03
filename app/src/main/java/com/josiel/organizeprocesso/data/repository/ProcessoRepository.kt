@@ -6,6 +6,7 @@ import com.josiel.organizeprocesso.data.local.ProcessoEntity
 import com.josiel.organizeprocesso.data.remote.dto.ItemDto
 import com.josiel.organizeprocesso.data.remote.dto.ProcessoDto
 import com.josiel.organizeprocesso.data.remote.dto.paraEntity
+import com.josiel.organizeprocesso.data.remote.updateVerificado
 import com.josiel.organizeprocesso.domain.model.StatusGeralProcesso
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
@@ -131,7 +132,7 @@ class ProcessoRepository(
             // Dashboard Início, seção 4).
             put("atualizado_em", Instant.now().toString())
         }
-        client.postgrest["processos"].update(linhaProcesso) {
+        client.postgrest["processos"].updateVerificado(linhaProcesso) {
             filter { eq("id", processo.id) }
         }
 

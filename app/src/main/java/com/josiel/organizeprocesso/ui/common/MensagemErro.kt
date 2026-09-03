@@ -1,5 +1,6 @@
 package com.josiel.organizeprocesso.ui.common
 
+import com.josiel.organizeprocesso.data.repository.EscritaSemEfeitoException
 import io.github.jan.supabase.exceptions.RestException
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.jsonObject
@@ -13,6 +14,10 @@ const val MENSAGEM_ERRO_GENERICA = "Sem conexão. Tente novamente."
 
 /** Mensagem exibida quando não há perfil carregado para montar o payload. */
 const val MENSAGEM_SESSAO_AUSENTE = "Sessão não encontrada. Faça login novamente."
+
+/** Mensagem exibida quando um update via Postgrest afeta 0 linhas (ver [EscritaSemEfeitoException]). */
+const val MENSAGEM_ESCRITA_SEM_EFEITO =
+    "Não foi possível salvar — o registro pode ter sido alterado ou removido por outra pessoa. Atualize a tela e tente novamente."
 
 /**
  * Converte a exceção de uma escrita em texto exibível ao usuário.
@@ -38,6 +43,7 @@ const val MENSAGEM_SESSAO_AUSENTE = "Sessão não encontrada. Faça login novame
  */
 fun mensagemDeErro(e: Exception): String = when (e) {
     is RestException -> mensagemDoRestException(e.error)
+    is EscritaSemEfeitoException -> MENSAGEM_ESCRITA_SEM_EFEITO
     else -> MENSAGEM_ERRO_GENERICA
 }
 

@@ -7,6 +7,7 @@ import com.josiel.organizeprocesso.data.local.ProcessoFaseHistoricoEntity
 import com.josiel.organizeprocesso.data.remote.dto.ProcessoDto
 import com.josiel.organizeprocesso.data.remote.dto.ProcessoFaseHistoricoDto
 import com.josiel.organizeprocesso.data.remote.dto.paraEntity
+import com.josiel.organizeprocesso.data.remote.updateVerificado
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import java.time.LocalDate
@@ -86,7 +87,7 @@ class HistoricoFaseRepository(
             put("notificar_prazo", notificarPrazo)
             put("observacoes", novaObservacao)
         }
-        client.postgrest["processo_fase_historico"].update(linha) {
+        client.postgrest["processo_fase_historico"].updateVerificado(linha) {
             filter { eq("id", historico.id) }
         }
         if (novaObservacao != historico.observacoes) {

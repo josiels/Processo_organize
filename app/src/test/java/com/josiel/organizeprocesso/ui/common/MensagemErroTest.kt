@@ -1,5 +1,6 @@
 package com.josiel.organizeprocesso.ui.common
 
+import com.josiel.organizeprocesso.data.repository.EscritaSemEfeitoException
 import io.github.jan.supabase.exceptions.RestException
 import io.mockk.every
 import io.mockk.mockk
@@ -43,5 +44,14 @@ class MensagemErroTest {
         val resultado = mensagemDeErro(excecao)
 
         assertEquals(MENSAGEM_ERRO_GENERICA, resultado)
+    }
+
+    @Test
+    fun `EscritaSemEfeitoException retorna a mensagem de registro alterado ou removido`() {
+        val excecao = EscritaSemEfeitoException()
+
+        val resultado = mensagemDeErro(excecao)
+
+        assertEquals(MENSAGEM_ESCRITA_SEM_EFEITO, resultado)
     }
 }

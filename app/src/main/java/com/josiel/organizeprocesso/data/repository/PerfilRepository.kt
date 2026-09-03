@@ -4,6 +4,7 @@ import com.josiel.organizeprocesso.data.local.PerfilDao
 import com.josiel.organizeprocesso.data.local.PerfilEntity
 import com.josiel.organizeprocesso.data.remote.dto.PerfilDto
 import com.josiel.organizeprocesso.data.remote.papelDoTexto
+import com.josiel.organizeprocesso.data.remote.updateVerificado
 import io.github.jan.supabase.SupabaseClient
 import io.github.jan.supabase.postgrest.postgrest
 import java.time.Instant
@@ -39,7 +40,7 @@ class PerfilRepository(
             put("notificar_prazo", notificarPrazo)
             put("notificar_tempo_parado", notificarTempoParado)
         }
-        client.postgrest["perfis"].update(linha) {
+        client.postgrest["perfis"].updateVerificado(linha) {
             filter { eq("id", perfilId) }
         }
         sincronizar()
