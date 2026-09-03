@@ -27,7 +27,12 @@ class TipoProcessoRepository(
         nome: String,
         diasAlertaAtencao: Int,
         diasAlertaCritico: Int,
-        organizacaoId: String
+        organizacaoId: String,
+        // Defaults preservam a chamada existente em TipoProcessoCadastroViewModel
+        // até a Task 3 atualizá-la para passar os dois explicitamente — sem
+        // isso, o build ficaria quebrado entre a Task 2 e a Task 3.
+        simples: Boolean = false,
+        fasePadraoId: String? = null
     ) {
         val linha = buildJsonObject {
             put("id", id ?: UUID.randomUUID().toString())
@@ -35,6 +40,13 @@ class TipoProcessoRepository(
             put("nome", nome)
             put("dias_alerta_atencao", diasAlertaAtencao)
             put("dias_alerta_critico", diasAlertaCritico)
+            put("simples", simples)
+            // Sempre inclui a chave, mesmo quando null: upsert do Postgrest só
+            // toca colunas presentes no payload — omitir a chave deixaria uma
+            // fase_padrao_id antiga intacta no servidor ao desligar o toggle
+            // "simples" na edição de um tipo (mesmo motivo documentado em
+            // ProcessoRepository.atualizar() para valor_pesquisa_unit).
+            put("fase_padrao_id", fasePadraoId)
         }
         client.postgrest["tipos_processo"].upsert(linha)
         sincronizar()
@@ -53,5 +65,7 @@ private fun TipoProcessoDto.paraEntity(): TipoProcessoEntity = TipoProcessoEntit
     organizacaoId = organizacaoId,
     nome = nome,
     diasAlertaAtencao = diasAlertaAtencao,
-    diasAlertaCritico = diasAlertaCritico
+    diasAlertaCritico = diasAlertaCritico,
+    simples = simples,
+    fasePadraoId = fasePadraoId
 )

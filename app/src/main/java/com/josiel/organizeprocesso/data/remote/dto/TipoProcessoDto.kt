@@ -9,5 +9,7 @@ data class TipoProcessoDto(
     @SerialName("organizacao_id") val organizacaoId: String,
     val nome: String,
     @SerialName("dias_alerta_atencao") val diasAlertaAtencao: Int,
-    @SerialName("dias_alerta_critico") val diasAlertaCritico: Int
+    @SerialName("dias_alerta_critico") val diasAlertaCritico: Int,
+    val simples: Boolean = false,
+    @SerialName("fase_padrao_id") val fasePadraoId: String? = null
 )

@@ -18,7 +18,7 @@ import androidx.room.TypeConverters
         AnexoLinkEntity::class,
         DiligenciaEntity::class
     ],
-    version = 3,
+    version = 4,
     exportSchema = true
 )
 @TypeConverters(Converters::class)
