@@ -153,10 +153,17 @@ class ProcessoFormViewModel(
 
     fun atualizarTipo(tipoProcessoId: String) {
         val tipoSelecionado = tiposProcesso.value.find { it.id == tipoProcessoId }
-        val faseSelecionadaId = decidirFaseAoTrocarTipo(
-            tipoSimples = tipoSelecionado?.simples == true,
-            fasePadraoId = tipoSelecionado?.fasePadraoId
-        )
+        val tipoSimples = tipoSelecionado?.simples == true
+        // Em edição, só sobrescreve a fase já escolhida quando o novo tipo é
+        // simples (precisa forçar a fase-padrão) — trocar para um tipo "com
+        // etapas" durante uma edição não deveria zerar a fase de um processo
+        // que já tem uma (achado da revisão final: limpar incondicionalmente
+        // deixava o Salvar desabilitado sem necessidade nesse caso).
+        val faseSelecionadaId = if (tipoSimples || !ehEdicao) {
+            decidirFaseAoTrocarTipo(tipoSimples = tipoSimples, fasePadraoId = tipoSelecionado?.fasePadraoId)
+        } else {
+            _uiState.value.faseSelecionadaId
+        }
         _uiState.value = _uiState.value.copy(tipoProcessoId = tipoProcessoId, faseSelecionadaId = faseSelecionadaId)
     }
 

@@ -79,6 +79,11 @@ class ProcessoDetalheViewModel(
 
     private val _erro = MutableStateFlow<String?>(null)
 
+    // Guarda `concluir()` de ler um cache de itens ainda vazio (achado da
+    // revisão final: mesmo risco de zerar valor_estimado_total já tratado em
+    // ProcessoFormViewModel para o formulário de edição/criação).
+    private val _itensSincronizados = MutableStateFlow(false)
+
     init {
         // Sync preguiçoso por processo: `processo_fase_historico` e `itens` não
         // entram no sync pós-login por processo, e o cache do Room é destrutivo
@@ -88,6 +93,7 @@ class ProcessoDetalheViewModel(
             try {
                 historicoRepository.sincronizar(processoId)
                 itemRepository.sincronizar(processoId)
+                _itensSincronizados.value = true
             } catch (e: Exception) {
                 if (e is CancellationException) {
                     throw e
@@ -192,6 +198,13 @@ class ProcessoDetalheViewModel(
      * não é fechada: não há "próxima fase" para a qual avançar.
      */
     fun concluir() {
+        if (!_itensSincronizados.value) {
+            // Sem isso, salvar agora reescreveria valor_estimado_total a partir
+            // de uma lista de itens possivelmente vazia (cache ainda não
+            // sincronizado) — mesmo risco documentado em ProcessoFormViewModel.
+            _erro.value = "Aguarde a sincronização terminar antes de concluir o processo."
+            return
+        }
         viewModelScope.launch {
             _erro.value = null
             try {
