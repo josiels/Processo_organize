@@ -175,7 +175,12 @@ fun AppNavHost(
         ) {
             composable<Login> { LoginScreen() }
 
-            composable<Inicio> { InicioScreen() }
+            composable<Inicio> {
+                InicioScreen(
+                    onProcessoClick = { processoId -> navController.navigate(ProcessoDetalhe(processoId)) },
+                    onVerTodosClick = { navController.navigate(Processos) }
+                )
+            }
 
             composable<Processos> {
                 ProcessosScreen(
