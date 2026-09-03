@@ -14,7 +14,15 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 
-/** ViewModel da Agenda (spec da Agenda, seção 6). */
+/**
+ * ViewModel da Agenda (spec da Agenda, seção 6). Ao contrário de
+ * `selecionarProximosPrazos` (Dashboard Início), NÃO exclui prazos já
+ * vencidos — um calendário precisa mostrar o que já venceu (com a bolinha
+ * vermelha de `calcularUrgenciaPrazo`), diferente do resumo do Dashboard,
+ * que só lista o que ainda está por vir. Divergência deliberada, não uma
+ * inconsistência a "corrigir" entre os dois (achado da revisão final da
+ * Agenda).
+ */
 class AgendaViewModel(application: Application) : AndroidViewModel(application) {
 
     private val database = AppDatabase.getInstance(application)

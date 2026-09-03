@@ -1,6 +1,7 @@
 package com.josiel.organizeprocesso.ui.agenda
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -27,6 +28,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.josiel.organizeprocesso.domain.model.StatusSemaforo
@@ -73,11 +75,23 @@ fun AgendaScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            IconButton(onClick = { mesAtual = mesAtual.minusMonths(1) }) {
+            IconButton(onClick = {
+                // Reseleciona o dia 1 do mês exibido — sem isso, a lista abaixo
+                // continuava mostrando os prazos do dia selecionado no mês
+                // anterior, sem nenhuma indicação disso na tela (achado da
+                // revisão final da Agenda).
+                val novoMes = mesAtual.minusMonths(1)
+                mesAtual = novoMes
+                diaSelecionado = novoMes.atDay(1)
+            }) {
                 Text("‹", style = MaterialTheme.typography.headlineSmall)
             }
             Text(nomeDoMes(mesAtual), style = MaterialTheme.typography.titleMedium)
-            IconButton(onClick = { mesAtual = mesAtual.plusMonths(1) }) {
+            IconButton(onClick = {
+                val novoMes = mesAtual.plusMonths(1)
+                mesAtual = novoMes
+                diaSelecionado = novoMes.atDay(1)
+            }) {
                 Text("›", style = MaterialTheme.typography.headlineSmall)
             }
         }
@@ -114,6 +128,12 @@ fun AgendaScreen(
 
         HorizontalDivider(modifier = Modifier.padding(vertical = 12.dp))
 
+        Text(
+            "Prazos de ${nomeCompletoDoDia(diaSelecionado)}",
+            style = MaterialTheme.typography.titleSmall,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+
         if (itensDoDiaSelecionado.isEmpty()) {
             Text(
                 "Nenhum prazo neste dia.",
@@ -129,11 +149,18 @@ fun AgendaScreen(
                             .clickable { onProcessoClick(item.processoId) }
                             .padding(vertical = 4.dp)
                     ) {
-                        Text(item.numero, style = MaterialTheme.typography.bodyMedium)
+                        Text(
+                            item.numero,
+                            style = MaterialTheme.typography.bodyMedium,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
                         Text(
                             "${item.objeto} — ${item.faseNome}",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -143,6 +170,9 @@ fun AgendaScreen(
 }
 
 private fun nomeDoMes(mes: YearMonth): String = "${nomesDosMeses[mes.monthValue - 1]} de ${mes.year}"
+
+private fun nomeCompletoDoDia(dia: LocalDate): String =
+    "${dia.dayOfMonth} de ${nomesDosMeses[dia.monthValue - 1].lowercase()} de ${dia.year}"
 
 @Composable
 private fun DiaCelula(
@@ -161,11 +191,33 @@ private fun DiaCelula(
     ) {
         if (dia != null) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Text(
-                    dia.dayOfMonth.toString(),
-                    style = MaterialTheme.typography.bodyMedium,
-                    color = if (selecionado || dia == hoje) Indigo600 else MaterialTheme.colorScheme.onSurface
-                )
+                // Selecionado ganha círculo de fundo preenchido; hoje (quando
+                // não é o selecionado) ganha só uma borda — antes os dois
+                // compartilhavam a mesma cor de texto sem mais nenhuma
+                // distinção visual (achado da revisão final da Agenda).
+                val corTexto = when {
+                    selecionado -> MaterialTheme.colorScheme.onPrimary
+                    dia == hoje -> Indigo600
+                    else -> MaterialTheme.colorScheme.onSurface
+                }
+                Box(
+                    modifier = Modifier
+                        .size(28.dp)
+                        .then(
+                            when {
+                                selecionado -> Modifier.background(Indigo600, CircleShape)
+                                dia == hoje -> Modifier.border(1.5.dp, Indigo600, CircleShape)
+                                else -> Modifier
+                            }
+                        ),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        dia.dayOfMonth.toString(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = corTexto
+                    )
+                }
                 if (urgencia != null) {
                     val cor = when (urgencia) {
                         StatusSemaforo.OK -> VerdeOk
