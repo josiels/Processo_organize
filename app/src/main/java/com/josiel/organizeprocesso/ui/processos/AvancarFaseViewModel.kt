@@ -184,6 +184,19 @@ class AvancarFaseViewModel(
         viewModelScope.launch {
             limparErro()
             try {
+                // avancar_fase() só recebe p_observacao_inicial da fase NOVA — a
+                // observação pendente da fase atual (digitada mas nunca salva
+                // via o ícone "Salvar") precisa ser gravada antes de fechar essa
+                // entrada, ou o RPC a descarta silenciosamente.
+                estado.historicoAtual?.let { historico ->
+                    historicoRepository.salvarEntradaAtual(
+                        historico = historico,
+                        responsavelId = estado.executorId,
+                        prazoLimite = estado.prazoLimite,
+                        notificarPrazo = estado.notificarPrazo,
+                        novaObservacao = estado.observacao
+                    )
+                }
                 historicoRepository.mudarFase(
                     processo = processo,
                     faseDestinoId = faseDestinoId,
