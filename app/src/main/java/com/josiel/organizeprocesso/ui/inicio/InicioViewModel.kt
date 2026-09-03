@@ -45,12 +45,16 @@ class InicioViewModel(application: Application) : AndroidViewModel(application) 
     val uiState: StateFlow<InicioUiState> = combine(
         processoRepository.observarTodos(),
         faseRepository.observarTodas(),
-        historicoDao.observarTodosAtivos(),
         historicoDao.observarTodos(),
         perfilRepository.observarTodos()
-    ) { processos, fases, historicosAtivos, historicoCompleto, perfis ->
+    ) { processos, fases, historicoCompleto, perfis ->
         val faseMap = fases.associateBy { it.id }
-        val historicoAtivoPorProcesso = historicosAtivos.associateBy { it.processoId }
+        // observarTodosAtivos() era um flow separado, mas seu filtro
+        // (dataSaida == null) é um subconjunto estrito do que historicoCompleto
+        // já traz — derivar em memória evita uma segunda query no Room e uma
+        // recomputação duplicada do combine a cada escrita em
+        // processo_fase_historico (achado da revisão final do Dashboard Início).
+        val historicoAtivoPorProcesso = historicoCompleto.filter { it.dataSaida == null }.associateBy { it.processoId }
         val hoje = LocalDate.now()
 
         val resumos = processos.map { processo ->
