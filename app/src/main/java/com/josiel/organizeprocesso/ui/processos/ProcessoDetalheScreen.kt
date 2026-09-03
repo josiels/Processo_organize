@@ -85,6 +85,7 @@ fun ProcessoDetalheScreen(
     val estado by viewModel.uiState.collectAsState()
     var abaSelecionada by remember { mutableIntStateOf(0) }
     val onDesignar: (String?) -> Unit = { novoResponsavelId -> viewModel.designar(novoResponsavelId) }
+    val onConcluir: () -> Unit = { viewModel.concluir() }
 
     Scaffold(
         modifier = modifier,
@@ -125,7 +126,7 @@ fun ProcessoDetalheScreen(
             }
 
             when (abaSelecionada) {
-                0 -> AbaDadosGerais(estado, onAvancarFaseClick, onDesignar)
+                0 -> AbaDadosGerais(estado, onAvancarFaseClick, onConcluir, onDesignar)
                 1 -> AbaItens(estado.itens)
                 2 -> AbaTimeline(estado.historico)
                 else -> AbaAnexos()
@@ -138,6 +139,7 @@ fun ProcessoDetalheScreen(
 private fun AbaDadosGerais(
     estado: ProcessoDetalheUiState,
     onAvancarFaseClick: () -> Unit,
+    onConcluir: () -> Unit,
     onDesignar: (String?) -> Unit
 ) {
     val processo = estado.processo ?: return
@@ -207,13 +209,23 @@ private fun AbaDadosGerais(
         }
 
         if (estado.podeEditar) {
-            PillButton(
-                text = "Avançar fase",
-                onClick = onAvancarFaseClick,
-                containerColor = MaterialTheme.colorScheme.primary,
-                contentColor = MaterialTheme.colorScheme.onPrimary,
-                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
-            )
+            if (estado.tipoProcessoSimples) {
+                PillButton(
+                    text = "Concluir processo",
+                    onClick = onConcluir,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                )
+            } else {
+                PillButton(
+                    text = "Avançar fase",
+                    onClick = onAvancarFaseClick,
+                    containerColor = MaterialTheme.colorScheme.primary,
+                    contentColor = MaterialTheme.colorScheme.onPrimary,
+                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                )
+            }
         }
 
         if (mostrarDialogoDesignar) {

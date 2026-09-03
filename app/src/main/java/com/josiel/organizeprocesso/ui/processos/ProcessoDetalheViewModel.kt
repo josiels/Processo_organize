@@ -15,6 +15,7 @@ import com.josiel.organizeprocesso.data.repository.ItemRepository
 import com.josiel.organizeprocesso.data.repository.PerfilRepository
 import com.josiel.organizeprocesso.data.repository.ProcessoRepository
 import com.josiel.organizeprocesso.data.repository.TipoProcessoRepository
+import com.josiel.organizeprocesso.domain.model.StatusGeralProcesso
 import com.josiel.organizeprocesso.domain.model.StatusSemaforo
 import com.josiel.organizeprocesso.domain.usecase.AcaoDesignacao
 import com.josiel.organizeprocesso.domain.usecase.acaoDesignacaoDisponivel
@@ -45,6 +46,7 @@ data class ProcessoDetalheUiState(
     val processo: ProcessoEntity? = null,
     val faseAtualNome: String = "",
     val tipoProcessoNome: String = "",
+    val tipoProcessoSimples: Boolean = false,
     val itens: List<ItemEntity> = emptyList(),
     val historico: List<HistoricoItemUi> = emptyList(),
     val designadoParaNome: String? = null,
@@ -135,6 +137,7 @@ class ProcessoDetalheViewModel(
             processo = processo,
             faseAtualNome = faseAtual?.nome ?: "",
             tipoProcessoNome = tipoProcesso?.nome ?: "",
+            tipoProcessoSimples = tipoProcesso?.simples == true,
             itens = itens,
             historico = historico
                 .sortedByDescending { it.dataEntrada }
@@ -173,6 +176,32 @@ class ProcessoDetalheViewModel(
             _erro.value = null
             try {
                 processoRepository.designar(processoId, novoResponsavelId)
+            } catch (e: Exception) {
+                if (e is CancellationException) {
+                    throw e
+                }
+                _erro.value = mensagemDeErro(e)
+            }
+        }
+    }
+
+    /**
+     * Conclui um processo de tipo simples direto, sem passar por
+     * AvancarFaseScreen — reaproveita ProcessoRepository.atualizar() (spec de
+     * tipo-processo-simples, seção 5). A linha ativa de processo_fase_historico
+     * não é fechada: não há "próxima fase" para a qual avançar.
+     */
+    fun concluir() {
+        viewModelScope.launch {
+            _erro.value = null
+            try {
+                val estado = uiState.value
+                val processo = estado.processo ?: return@launch
+                processoRepository.atualizar(
+                    processo = processo.copy(statusGeral = StatusGeralProcesso.CONCLUIDO),
+                    itensAtuais = estado.itens,
+                    itensRemovidos = emptyList()
+                )
             } catch (e: Exception) {
                 if (e is CancellationException) {
                     throw e
