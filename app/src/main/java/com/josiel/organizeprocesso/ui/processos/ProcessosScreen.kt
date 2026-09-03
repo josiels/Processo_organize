@@ -44,10 +44,8 @@ import com.josiel.organizeprocesso.ui.components.PillButton
 import com.josiel.organizeprocesso.ui.components.SemaforoPill
 import com.josiel.organizeprocesso.ui.components.SideBarCard
 import com.josiel.organizeprocesso.domain.model.StatusSemaforo
-import com.josiel.organizeprocesso.ui.theme.AmareloAtencao
 import com.josiel.organizeprocesso.ui.theme.Indigo600
-import com.josiel.organizeprocesso.ui.theme.VerdeOk
-import com.josiel.organizeprocesso.ui.theme.VermelhoCritico
+import com.josiel.organizeprocesso.ui.theme.cor
 
 private enum class FiltroProcesso(val rotulo: String) {
     TODOS("Todos"),
@@ -191,11 +189,7 @@ fun ProcessosScreen(
 
 @Composable
 private fun ProcessoCard(item: ProcessoListItem, onClick: () -> Unit) {
-    val corBarra = when (item.statusSemaforo) {
-        StatusSemaforo.OK -> VerdeOk
-        StatusSemaforo.ATENCAO -> AmareloAtencao
-        StatusSemaforo.CRITICO -> VermelhoCritico
-    }
+    val corBarra = item.statusSemaforo.cor()
     SideBarCard(
         barColor = corBarra,
         modifier = Modifier.clickable(onClick = onClick)

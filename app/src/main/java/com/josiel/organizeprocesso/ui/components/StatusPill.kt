@@ -11,14 +11,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.josiel.organizeprocesso.domain.model.StatusSemaforo
-import com.josiel.organizeprocesso.ui.theme.AmareloAtencao
 import com.josiel.organizeprocesso.ui.theme.AmareloAtencaoPastel
 import com.josiel.organizeprocesso.ui.theme.FaseBadgeContainerColors
 import com.josiel.organizeprocesso.ui.theme.FaseBadgeContentColors
-import com.josiel.organizeprocesso.ui.theme.VerdeOk
 import com.josiel.organizeprocesso.ui.theme.VerdeOkPastel
-import com.josiel.organizeprocesso.ui.theme.VermelhoCritico
 import com.josiel.organizeprocesso.ui.theme.VermelhoCriticoPastel
+import com.josiel.organizeprocesso.ui.theme.cor
 import kotlin.math.absoluteValue
 
 /**
@@ -50,12 +48,12 @@ fun SemaforoPill(
     status: StatusSemaforo,
     modifier: Modifier = Modifier
 ) {
-    val (label, container, content) = when (status) {
-        StatusSemaforo.OK -> Triple("Em dia", VerdeOkPastel, VerdeOk)
-        StatusSemaforo.ATENCAO -> Triple("Atenção", AmareloAtencaoPastel, AmareloAtencao)
-        StatusSemaforo.CRITICO -> Triple("Crítico", VermelhoCriticoPastel, VermelhoCritico)
+    val (label, container) = when (status) {
+        StatusSemaforo.OK -> "Em dia" to VerdeOkPastel
+        StatusSemaforo.ATENCAO -> "Atenção" to AmareloAtencaoPastel
+        StatusSemaforo.CRITICO -> "Crítico" to VermelhoCriticoPastel
     }
-    StatusPill(text = label, containerColor = container, contentColor = content, modifier = modifier)
+    StatusPill(text = label, containerColor = container, contentColor = status.cor(), modifier = modifier)
 }
 
 /** Pill de badge da fase, com cor derivada de forma determinística do id da fase. */

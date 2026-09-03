@@ -34,10 +34,8 @@ import androidx.lifecycle.viewmodel.compose.viewModel
 import com.josiel.organizeprocesso.domain.model.StatusSemaforo
 import com.josiel.organizeprocesso.domain.usecase.calcularUrgenciaPrazo
 import com.josiel.organizeprocesso.domain.usecase.gerarGradeCalendario
-import com.josiel.organizeprocesso.ui.theme.AmareloAtencao
 import com.josiel.organizeprocesso.ui.theme.Indigo600
-import com.josiel.organizeprocesso.ui.theme.VerdeOk
-import com.josiel.organizeprocesso.ui.theme.VermelhoCritico
+import com.josiel.organizeprocesso.ui.theme.cor
 import java.time.LocalDate
 import java.time.YearMonth
 
@@ -219,12 +217,7 @@ private fun DiaCelula(
                     )
                 }
                 if (urgencia != null) {
-                    val cor = when (urgencia) {
-                        StatusSemaforo.OK -> VerdeOk
-                        StatusSemaforo.ATENCAO -> AmareloAtencao
-                        StatusSemaforo.CRITICO -> VermelhoCritico
-                    }
-                    Box(modifier = Modifier.size(6.dp).background(cor, CircleShape))
+                    Box(modifier = Modifier.size(6.dp).background(urgencia.cor(), CircleShape))
                 } else {
                     Box(modifier = Modifier.size(6.dp))
                 }
