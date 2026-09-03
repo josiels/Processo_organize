@@ -53,6 +53,7 @@ fun TiposProcessoScreen(
     val tiposProcesso by viewModel.tiposProcesso.collectAsState()
     val erro by viewModel.erro.collectAsState()
     val fases by viewModel.fases.collectAsState()
+    val processosEmAndamentoPorTipo by viewModel.processosEmAndamentoPorTipo.collectAsState()
     var tipoEmEdicao by remember { mutableStateOf<TipoProcessoEntity?>(null) }
     var mostrarFormulario by remember { mutableStateOf(false) }
 
@@ -124,6 +125,7 @@ fun TiposProcessoScreen(
         TipoProcessoFormDialog(
             tipoProcessoInicial = tipoEmEdicao,
             fases = fases,
+            processosEmAndamentoDoTipo = processosEmAndamentoPorTipo[tipoEmEdicao?.id] ?: 0,
             onDismiss = { mostrarFormulario = false },
             onSalvar = { nome, diasAtencao, diasCritico, simples, fasePadraoId ->
                 viewModel.salvar(tipoEmEdicao?.id, nome, diasAtencao, diasCritico, simples, fasePadraoId)

@@ -8,7 +8,9 @@ import com.josiel.organizeprocesso.data.local.FaseEntity
 import com.josiel.organizeprocesso.data.local.TipoProcessoEntity
 import com.josiel.organizeprocesso.data.remote.SupabaseSessionManager
 import com.josiel.organizeprocesso.data.repository.FaseRepository
+import com.josiel.organizeprocesso.data.repository.ProcessoRepository
 import com.josiel.organizeprocesso.data.repository.TipoProcessoRepository
+import com.josiel.organizeprocesso.domain.model.StatusGeralProcesso
 import com.josiel.organizeprocesso.ui.common.MENSAGEM_SESSAO_AUSENTE
 import com.josiel.organizeprocesso.ui.common.mensagemDeErro
 import kotlinx.coroutines.CancellationException
@@ -16,18 +18,21 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
 class TipoProcessoCadastroViewModel(application: Application) : AndroidViewModel(application) {
+    private val database = AppDatabase.getInstance(application)
     private val repository = TipoProcessoRepository(
-        dao = AppDatabase.getInstance(application).tipoProcessoDao(),
+        dao = database.tipoProcessoDao(),
         client = SupabaseSessionManager.client
     )
     private val faseRepository = FaseRepository(
-        dao = AppDatabase.getInstance(application).faseDao(),
+        dao = database.faseDao(),
         client = SupabaseSessionManager.client
     )
+    private val processoRepository = ProcessoRepository(database, SupabaseSessionManager.client)
 
     val tiposProcesso: StateFlow<List<TipoProcessoEntity>> = repository.observarTodas()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
@@ -35,6 +40,20 @@ class TipoProcessoCadastroViewModel(application: Application) : AndroidViewModel
     /** Catálogo de Fases da organização, para o seletor de "fase única" de um tipo simples. */
     val fases: StateFlow<List<FaseEntity>> = faseRepository.observarTodas()
         .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
+
+    /**
+     * Quantos processos em andamento cada tipo tem, para avisar antes de
+     * marcar um tipo já em uso como "simples" (spec: o botão "Avançar fase"
+     * some para todos eles, viram "Concluir processo" direto).
+     */
+    val processosEmAndamentoPorTipo: StateFlow<Map<String, Int>> = processoRepository.observarTodos()
+        .map { processos ->
+            processos
+                .filter { it.statusGeral == StatusGeralProcesso.EM_ANDAMENTO }
+                .groupingBy { it.tipoProcessoId }
+                .eachCount()
+        }
+        .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyMap())
 
     private val _erro = MutableStateFlow<String?>(null)
 

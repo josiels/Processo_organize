@@ -27,11 +27,13 @@ import androidx.compose.ui.unit.dp
 import com.josiel.organizeprocesso.data.local.FaseEntity
 import com.josiel.organizeprocesso.data.local.TipoProcessoEntity
 import com.josiel.organizeprocesso.ui.components.AppToggle
+import com.josiel.organizeprocesso.ui.theme.AmareloAtencao
 
 @Composable
 fun TipoProcessoFormDialog(
     tipoProcessoInicial: TipoProcessoEntity?,
     fases: List<FaseEntity>,
+    processosEmAndamentoDoTipo: Int = 0,
     onDismiss: () -> Unit,
     onSalvar: (nome: String, diasAtencao: Int, diasCritico: Int, simples: Boolean, fasePadraoId: String?) -> Unit,
     onExcluir: (() -> Unit)?
@@ -87,6 +89,14 @@ fun TipoProcessoFormDialog(
                             // de um tipo que voltou a ser com etapas.
                             if (!ligado) fasePadraoId = null
                         }
+                    )
+                }
+                if (simples && tipoProcessoInicial?.simples != true && processosEmAndamentoDoTipo > 0) {
+                    Text(
+                        "$processosEmAndamentoDoTipo processo(s) em andamento deste tipo vão perder o botão " +
+                            "\"Avançar fase\" e passar a mostrar \"Concluir processo\" diretamente.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = AmareloAtencao
                     )
                 }
                 if (simples) {
