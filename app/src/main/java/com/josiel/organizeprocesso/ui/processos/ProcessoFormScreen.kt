@@ -158,21 +158,24 @@ fun ProcessoFormScreen(
                 enabled = !estado.somenteLeitura
             )
 
-            DropdownField(
-                label = "Fase inicial",
-                opcoes = fases,
-                selecionado = fases.find { it.id == estado.faseSelecionadaId },
-                rotulo = { it.nome },
-                onSelecionado = { viewModel.atualizarFase(it.id) },
-                modifier = Modifier.fillMaxWidth(),
-                enabled = !estado.somenteLeitura
-            )
-            if (fases.isEmpty()) {
-                Text(
-                    "Cadastre ao menos uma fase em Mais > Cadastro de Fases antes de criar um processo.",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.error
+            val tipoSelecionado = tiposProcesso.find { it.id == estado.tipoProcessoId }
+            if (tipoSelecionado?.simples != true) {
+                DropdownField(
+                    label = "Fase inicial",
+                    opcoes = fases,
+                    selecionado = fases.find { it.id == estado.faseSelecionadaId },
+                    rotulo = { it.nome },
+                    onSelecionado = { viewModel.atualizarFase(it.id) },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !estado.somenteLeitura
                 )
+                if (fases.isEmpty()) {
+                    Text(
+                        "Cadastre ao menos uma fase em Mais > Cadastro de Fases antes de criar um processo.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
             }
 
             DropdownField(

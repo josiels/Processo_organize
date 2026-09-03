@@ -14,6 +14,7 @@ import com.josiel.organizeprocesso.data.repository.ItemRepository
 import com.josiel.organizeprocesso.data.repository.ProcessoRepository
 import com.josiel.organizeprocesso.data.repository.TipoProcessoRepository
 import com.josiel.organizeprocesso.domain.model.StatusGeralProcesso
+import com.josiel.organizeprocesso.domain.usecase.decidirFaseAoTrocarTipo
 import com.josiel.organizeprocesso.domain.usecase.podeCriarProcesso
 import com.josiel.organizeprocesso.domain.usecase.podeEditarProcesso
 import com.josiel.organizeprocesso.ui.common.MENSAGEM_SESSAO_AUSENTE
@@ -151,7 +152,12 @@ class ProcessoFormViewModel(
     }
 
     fun atualizarTipo(tipoProcessoId: String) {
-        _uiState.value = _uiState.value.copy(tipoProcessoId = tipoProcessoId)
+        val tipoSelecionado = tiposProcesso.value.find { it.id == tipoProcessoId }
+        val faseSelecionadaId = decidirFaseAoTrocarTipo(
+            tipoSimples = tipoSelecionado?.simples == true,
+            fasePadraoId = tipoSelecionado?.fasePadraoId
+        )
+        _uiState.value = _uiState.value.copy(tipoProcessoId = tipoProcessoId, faseSelecionadaId = faseSelecionadaId)
     }
 
     fun atualizarDataAbertura(valor: LocalDate) {
