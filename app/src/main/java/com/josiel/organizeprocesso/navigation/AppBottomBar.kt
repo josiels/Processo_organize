@@ -16,7 +16,6 @@ import androidx.compose.runtime.getValue
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
-import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.currentBackStackEntryAsState
 import com.josiel.organizeprocesso.ui.theme.Indigo600
@@ -51,7 +50,17 @@ fun AppBottomBar(navController: NavHostController) {
                 selected = selected,
                 onClick = {
                     navController.navigate(item.route) {
-                        popUpTo(navController.graph.findStartDestination().id) {
+                        // `findStartDestination()` sempre resolve pra Login (o
+                        // startDestination declarado do grafo) — que é removido
+                        // da pilha assim que o usuário autentica
+                        // (AppNavHost.kt, popUpTo(Login) { inclusive = true }).
+                        // Um popUpTo mirando um id que não está mais na pilha é
+                        // um no-op silencioso: cada troca de aba empilhava uma
+                        // tela nova em vez de reaproveitar a existente. Início é
+                        // a "aba casa" de verdade — sempre presente na pilha
+                        // depois do login (achado da revisão final do Dashboard
+                        // Início, corrigido aqui).
+                        popUpTo(Inicio) {
                             saveState = true
                         }
                         launchSingleTop = true
