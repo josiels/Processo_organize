@@ -207,10 +207,11 @@ fun AvancarFaseScreen(
                 )
             } else {
                 diligencias.forEach { diligencia ->
+                    val autorNome = estado.perfis.find { it.id == diligencia.autorId }?.nome ?: "—"
                     Column(modifier = Modifier.padding(vertical = 4.dp)) {
                         Text(diligencia.conteudo, style = MaterialTheme.typography.bodyMedium)
                         Text(
-                            formatoDataHora.format(diligencia.criadoEm.atZone(java.time.ZoneId.systemDefault())),
+                            "$autorNome · ${formatoDataHora.format(diligencia.criadoEm.atZone(java.time.ZoneId.systemDefault()))}",
                             style = MaterialTheme.typography.labelSmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
