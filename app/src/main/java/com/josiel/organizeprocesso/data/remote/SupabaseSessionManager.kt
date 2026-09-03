@@ -53,18 +53,28 @@ object SupabaseSessionManager {
      * plugin Auth restaura a sessão persistida sozinho num cold start — sem
      * passar por `login()` —, e os gates de permissão da UI precisam ver o
      * perfil recarregado nesse caminho também (senão todo admin que reabre o
-     * app vira espectador somente-leitura). Quem recarrega no cold start é o
+     * app vira espectador somente-leitura). Quem recarrega — tanto no cold
+     * start quanto após um login interativo — é o único
      * `LaunchedEffect(sessionStatus)` de `AppNavHost`, antes de navegar para
-     * fora do Login.
+     * fora do Login (guardado por `perfilAtual.value == null`, então roda
+     * exatamente uma vez por sessão).
      */
     val perfilAtual: StateFlow<PerfilSessao?> = _perfilAtual.asStateFlow()
 
+    /**
+     * Só autentica — não recarrega o perfil aqui. `login()` e a restauração
+     * automática de sessão do cold start convergem para o mesmo
+     * `sessionStatus`, e `AppNavHost` é a única fonte de `carregarPerfilAtual()`
+     * para os dois casos; chamar aqui também criava uma corrida entre essa
+     * chamada e a de `AppNavHost` — se esta falhasse por rede instável
+     * enquanto a outra tinha sucesso em paralelo, o usuário via "login
+     * inválido" mesmo autenticado com sucesso.
+     */
     suspend fun login(email: String, senha: String) {
         client.auth.signInWith(Email) {
             this.email = email
             this.password = senha
         }
-        carregarPerfilAtual()
     }
 
     suspend fun logout() {
