@@ -191,7 +191,9 @@ fun AppNavHost(
                 )
             }
 
-            composable<Agenda> { AgendaScreen() }
+            composable<Agenda> {
+                AgendaScreen(onProcessoClick = { processoId -> navController.navigate(ProcessoDetalhe(processoId)) })
+            }
 
             composable<Mais> {
                 MaisScreen(
