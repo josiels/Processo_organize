@@ -91,7 +91,8 @@ fun ProcessosScreen(
             when (filtro) {
                 FiltroProcesso.TODOS -> true
                 FiltroProcesso.EM_ANDAMENTO -> item.processo.statusGeral == StatusGeralProcesso.EM_ANDAMENTO
-                FiltroProcesso.CRITICOS -> item.statusSemaforo == StatusSemaforo.CRITICO
+                FiltroProcesso.CRITICOS -> item.processo.statusGeral == StatusGeralProcesso.EM_ANDAMENTO &&
+                    item.statusSemaforo == StatusSemaforo.CRITICO
                 FiltroProcesso.CONCLUIDOS -> item.processo.statusGeral == StatusGeralProcesso.CONCLUIDO
             }
         }
