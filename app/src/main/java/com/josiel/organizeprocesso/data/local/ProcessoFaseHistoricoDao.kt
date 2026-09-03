@@ -24,6 +24,10 @@ interface ProcessoFaseHistoricoDao {
     @Query("SELECT * FROM processo_fase_historico WHERE dataSaida IS NULL")
     fun observarTodosAtivos(): Flow<List<ProcessoFaseHistoricoEntity>>
 
+    /** Toda a tabela (a RLS já limita à organização) — usado pelo Dashboard para achar avanços de fase de hoje, mesmo em entradas já fechadas. */
+    @Query("SELECT * FROM processo_fase_historico")
+    fun observarTodos(): Flow<List<ProcessoFaseHistoricoEntity>>
+
     /** A entrada de histórico da fase corrente de UM processo (usado na tela Avançar Fase). */
     @Query("SELECT * FROM processo_fase_historico WHERE processoId = :processoId AND dataSaida IS NULL LIMIT 1")
     fun observarAtivoPorProcesso(processoId: String): Flow<ProcessoFaseHistoricoEntity?>

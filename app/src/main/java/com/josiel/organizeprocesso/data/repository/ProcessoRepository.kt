@@ -123,6 +123,13 @@ class ProcessoRepository(
             put("tipo_processo_id", processo.tipoProcessoId)
             put("valor_estimado_total", valorTotal)
             put("status_geral", processo.statusGeral.name.lowercase())
+            // Sem isto, uma edição direta de campo ou a conclusão de um
+            // processo simples (ProcessoDetalheViewModel.concluir(), que
+            // chama este método) ficariam invisíveis para o resumo de
+            // "atualizações recentes" do Dashboard — só as RPCs avancar_fase/
+            // designar_processo tocavam esta coluna até agora (spec do
+            // Dashboard Início, seção 4).
+            put("atualizado_em", Instant.now().toString())
         }
         client.postgrest["processos"].update(linhaProcesso) {
             filter { eq("id", processo.id) }
