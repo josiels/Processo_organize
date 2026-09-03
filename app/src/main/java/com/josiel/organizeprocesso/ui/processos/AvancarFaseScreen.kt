@@ -253,6 +253,7 @@ fun AvancarFaseScreen(
         FaseDestinoDialog(
             tipo = tipo,
             fases = estado.fases.filter { it.id != estado.faseAtual?.id },
+            salvando = estado.salvando,
             onDismiss = { dialogoFase = null },
             onConfirmar = { faseDestino, motivo ->
                 viewModel.mudarFase(faseDestino.id, motivo) {
@@ -281,6 +282,7 @@ private enum class TipoMudancaFase { AVANCAR, RETORNAR }
 private fun FaseDestinoDialog(
     tipo: TipoMudancaFase,
     fases: List<FaseEntity>,
+    salvando: Boolean,
     onDismiss: () -> Unit,
     onConfirmar: (fase: FaseEntity, motivo: String?) -> Unit
 ) {
@@ -338,7 +340,7 @@ private fun FaseDestinoDialog(
         },
         confirmButton = {
             TextButton(
-                enabled = faseSelecionada != null && (!ehRetorno || motivo.isNotBlank()),
+                enabled = faseSelecionada != null && (!ehRetorno || motivo.isNotBlank()) && !salvando,
                 onClick = {
                     faseSelecionada?.let { onConfirmar(it, if (ehRetorno) motivo else null) }
                 }

@@ -44,6 +44,7 @@ data class ProcessoFormUiState(
     /** Nomes das fases pelas quais o processo já passou (edição) — usado por RegrasBloqueioCampos. */
     val fasesPercorridasNomes: Set<String> = emptySet(),
     val somenteLeitura: Boolean = false,
+    val salvando: Boolean = false,
     val erro: String? = null
 ) {
     val valorEstimadoTotal: Double
@@ -221,7 +222,7 @@ class ProcessoFormViewModel(
 
     fun salvar(onSalvo: (String) -> Unit) {
         val estado = _uiState.value
-        if (estado.somenteLeitura) return
+        if (estado.somenteLeitura || estado.salvando) return
         val faseId = estado.faseSelecionadaId ?: return
         if (!estado.valido) return
 
@@ -234,8 +235,11 @@ class ProcessoFormViewModel(
             return
         }
 
+        // Síncrono, antes do launch: evita a janela onde um segundo toque
+        // rápido (processado antes do coroutine sequer começar a rodar)
+        // ainda vê salvando=false e dispara uma segunda criação/edição.
+        _uiState.value = estado.copy(salvando = true, erro = null)
         viewModelScope.launch {
-            _uiState.value = _uiState.value.copy(erro = null)
             val id = try {
                 if (ehEdicao) {
                     val original = processoOriginal ?: return@launch
@@ -273,7 +277,7 @@ class ProcessoFormViewModel(
                 if (e is CancellationException) {
                     throw e
                 }
-                _uiState.value = _uiState.value.copy(erro = mensagemDeErro(e))
+                _uiState.value = _uiState.value.copy(erro = mensagemDeErro(e), salvando = false)
                 return@launch
             }
             onSalvo(id)

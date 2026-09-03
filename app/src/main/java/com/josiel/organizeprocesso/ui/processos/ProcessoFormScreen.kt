@@ -83,7 +83,7 @@ fun ProcessoFormScreen(
                 },
                 actions = {
                     IconButton(
-                        enabled = estado.valido && !estado.somenteLeitura,
+                        enabled = estado.valido && !estado.somenteLeitura && !estado.salvando,
                         onClick = { viewModel.salvar(onSalvo) }
                     ) {
                         Icon(Icons.Filled.Check, contentDescription = "Salvar")

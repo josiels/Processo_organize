@@ -50,6 +50,7 @@ data class AvancarFaseUiState(
     val prazoLimite: LocalDate? = null,
     val notificarPrazo: Boolean = false,
     val podeEditar: Boolean = false,
+    val salvando: Boolean = false,
     val erro: String? = null
 )
 
@@ -179,8 +180,12 @@ class AvancarFaseViewModel(
 
     fun mudarFase(faseDestinoId: String, motivoRetorno: String?, onConcluido: () -> Unit) {
         val estado = _uiState.value
-        if (!estado.podeEditar) return
+        if (!estado.podeEditar || estado.salvando) return
         val processo = estado.processo ?: return
+        // Síncrono, antes do launch: evita a janela onde um segundo toque em
+        // "Confirmar" (o diálogo só fecha quando onConcluido roda, depois da
+        // RPC) dispara uma segunda mudança de fase sobre a mesma entrada.
+        _uiState.value = estado.copy(salvando = true)
         viewModelScope.launch {
             limparErro()
             try {
@@ -210,6 +215,7 @@ class AvancarFaseViewModel(
                     throw e
                 }
                 registrarErro(e)
+                _uiState.value = _uiState.value.copy(salvando = false)
                 // Não navega de volta: o usuário precisa ver a mensagem.
                 return@launch
             }
