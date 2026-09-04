@@ -45,6 +45,7 @@ import com.josiel.organizeprocesso.ui.processos.AvancarFaseScreen
 import com.josiel.organizeprocesso.ui.processos.ProcessoDetalheScreen
 import com.josiel.organizeprocesso.ui.processos.ProcessoFormScreen
 import com.josiel.organizeprocesso.ui.processos.ProcessosScreen
+import com.josiel.organizeprocesso.ui.sobre.SobreScreen
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -202,6 +203,7 @@ fun AppNavHost(
                     onEquipeClick = { navController.navigate(Equipe) },
                     onFilaDistribuicaoClick = { navController.navigate(FilaDistribuicao) },
                     onConfiguracoesClick = { navController.navigate(Configuracoes) },
+                    onSobreClick = { navController.navigate(Sobre) },
                     onSairClick = {
                         coroutineScope.launch {
                             // Remove o token deste aparelho ANTES de encerrar a sessão
@@ -260,6 +262,10 @@ fun AppNavHost(
 
             composable<Configuracoes> {
                 ConfiguracoesScreen(onBackClick = { navController.navigateUp() })
+            }
+
+            composable<Sobre> {
+                SobreScreen(onBackClick = { navController.navigateUp() })
             }
 
             composable<FilaDistribuicao> {

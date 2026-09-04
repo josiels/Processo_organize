@@ -1,6 +1,7 @@
 package com.josiel.organizeprocesso.ui.auth
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
@@ -34,50 +35,60 @@ fun LoginScreen(viewModel: LoginViewModel = viewModel()) {
     var senha by remember { mutableStateOf("") }
     var mostrarSenha by remember { mutableStateOf(false) }
 
-    Column(
-        modifier = Modifier
-            .fillMaxSize()
-            .padding(PaddingValues(24.dp)),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        Text("Organize Processo", style = MaterialTheme.typography.headlineMedium)
-        Column(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            OutlinedTextField(
-                value = email,
-                onValueChange = { email = it },
-                label = { Text("E-mail") },
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = senha,
-                onValueChange = { senha = it },
-                label = { Text("Senha") },
-                visualTransformation = if (mostrarSenha) VisualTransformation.None else PasswordVisualTransformation(),
-                modifier = Modifier.fillMaxWidth()
-            )
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text("Mostrar senha")
-                AppToggle(checked = mostrarSenha, onCheckedChange = { mostrarSenha = it })
-            }
-            uiState.erro?.let { erro ->
-                Text(erro, color = MaterialTheme.colorScheme.error)
-            }
-            Button(
-                onClick = { viewModel.login(email, senha) },
-                enabled = !uiState.carregando && email.isNotBlank() && senha.isNotBlank(),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                if (uiState.carregando) {
-                    CircularProgressIndicator(modifier = Modifier.padding(4.dp))
-                } else {
-                    Text("Entrar")
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .padding(PaddingValues(24.dp)),
+            verticalArrangement = Arrangement.Center,
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text("Organize Processo", style = MaterialTheme.typography.headlineMedium)
+            Column(modifier = Modifier.fillMaxWidth().padding(top = 32.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                OutlinedTextField(
+                    value = email,
+                    onValueChange = { email = it },
+                    label = { Text("E-mail") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+                OutlinedTextField(
+                    value = senha,
+                    onValueChange = { senha = it },
+                    label = { Text("Senha") },
+                    visualTransformation = if (mostrarSenha) VisualTransformation.None else PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("Mostrar senha")
+                    AppToggle(checked = mostrarSenha, onCheckedChange = { mostrarSenha = it })
+                }
+                uiState.erro?.let { erro ->
+                    Text(erro, color = MaterialTheme.colorScheme.error)
+                }
+                Button(
+                    onClick = { viewModel.login(email, senha) },
+                    enabled = !uiState.carregando && email.isNotBlank() && senha.isNotBlank(),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    if (uiState.carregando) {
+                        CircularProgressIndicator(modifier = Modifier.padding(4.dp))
+                    } else {
+                        Text("Entrar")
+                    }
                 }
             }
         }
+        Text(
+            "Jolfe - Sistemas",
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .padding(bottom = 16.dp)
+        )
     }
 }

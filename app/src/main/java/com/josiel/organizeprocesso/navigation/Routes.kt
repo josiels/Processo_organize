@@ -49,4 +49,7 @@ object Configuracoes
 object FilaDistribuicao
 
 @Serializable
+object Sobre
+
+@Serializable
 data class FilaDistribuicaoDetalhe(val perfilId: String, val nome: String)

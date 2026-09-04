@@ -13,6 +13,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ExitToApp
 import androidx.compose.material.icons.automirrored.filled.List
 import androidx.compose.material.icons.filled.DateRange
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Refresh
@@ -50,6 +51,7 @@ fun MaisScreen(
     onEquipeClick: () -> Unit,
     onFilaDistribuicaoClick: () -> Unit,
     onConfiguracoesClick: () -> Unit,
+    onSobreClick: () -> Unit,
     onSairClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -69,6 +71,7 @@ fun MaisScreen(
         add(OpcaoMais("Fila de Distribuição", Icons.AutoMirrored.Filled.List, habilitado = true, onClick = onFilaDistribuicaoClick))
         add(OpcaoMais("Status de sincronização", Icons.Filled.Refresh, habilitado = false) {})
         add(OpcaoMais("Configurações", Icons.Filled.Settings, habilitado = true, onClick = onConfiguracoesClick))
+        add(OpcaoMais("Sobre", Icons.Filled.Info, habilitado = true, onClick = onSobreClick))
         add(OpcaoMais("Sair", Icons.AutoMirrored.Filled.ExitToApp, habilitado = true, onClick = onSairClick))
     }
 
