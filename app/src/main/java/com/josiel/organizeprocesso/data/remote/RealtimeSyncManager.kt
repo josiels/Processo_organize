@@ -79,10 +79,21 @@ object RealtimeSyncManager {
                     "fases" -> repositorios.fases
                     else -> repositorios.processos
                 }
+                // Chamar postgresChangeFlow() aqui — fora do launch abaixo — importa:
+                // é essa chamada, síncrona, que registra o interesse na tabela (fica
+                // gravado numa lista interna do canal que subscribe() lê pra montar a
+                // mensagem de join). Só o .collect() (loop de longa duração que reage
+                // a cada evento) precisa do launch. Antes, a chamada inteira — incluindo
+                // o postgresChangeFlow() — estava dentro do launch, e launch não garante
+                // rodar antes da próxima linha: subscribe() quase sempre executava
+                // primeiro, o canal assinava sem nenhuma tabela registrada, e o servidor
+                // nunca mandava evento nenhum (bug real: nada sincronizava via Realtime,
+                // só reabrindo o app).
+                val eventos = canal.postgresChangeFlow<PostgresAction>(schema = "public") {
+                    table = tabela
+                }
                 launch {
-                    canal.postgresChangeFlow<PostgresAction>(schema = "public") {
-                        table = tabela
-                    }.collect { callback() }
+                    eventos.collect { callback() }
                 }
                 canais.add(canal)
                 canal.subscribe()
