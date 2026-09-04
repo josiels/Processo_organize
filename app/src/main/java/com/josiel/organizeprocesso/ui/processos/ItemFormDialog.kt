@@ -19,6 +19,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.josiel.organizeprocesso.data.local.ItemEntity
+import com.josiel.organizeprocesso.ui.components.CampoValorMonetario
+import com.josiel.organizeprocesso.ui.components.formatarComoReais
+import com.josiel.organizeprocesso.ui.components.valorMonetarioParaDouble
 
 /**
  * Formulário de criação/edição de Item do processo (REQUISITOS.md, seção 4).
@@ -37,8 +40,12 @@ fun ItemFormDialog(
     var descricao by remember { mutableStateOf(itemInicial?.descricao.orEmpty()) }
     var quantidade by remember { mutableStateOf((itemInicial?.quantidade ?: 1.0).toString()) }
     var unidade by remember { mutableStateOf(itemInicial?.unidade.orEmpty()) }
-    var valorEstimadoUnit by remember { mutableStateOf((itemInicial?.valorEstimadoUnit ?: 0.0).toString()) }
-    var valorPesquisaUnit by remember { mutableStateOf(itemInicial?.valorPesquisaUnit?.toString().orEmpty()) }
+    var valorEstimadoUnit by remember {
+        mutableStateOf(itemInicial?.valorEstimadoUnit?.let(::formatarComoReais).orEmpty())
+    }
+    var valorPesquisaUnit by remember {
+        mutableStateOf(itemInicial?.valorPesquisaUnit?.let(::formatarComoReais).orEmpty())
+    }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -68,26 +75,22 @@ fun ItemFormDialog(
                         modifier = Modifier.weight(1f)
                     )
                 }
-                OutlinedTextField(
-                    value = valorEstimadoUnit,
-                    onValueChange = { valorEstimadoUnit = it.filter { c -> c.isDigit() || c == '.' } },
-                    label = { Text("Valor estimado unitário") },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                CampoValorMonetario(
+                    valor = valorEstimadoUnit,
+                    onValorChange = { valorEstimadoUnit = it },
+                    label = "Valor estimado unitário",
                     modifier = Modifier.fillMaxWidth()
                 )
-                OutlinedTextField(
-                    value = valorPesquisaUnit,
-                    onValueChange = { valorPesquisaUnit = it.filter { c -> c.isDigit() || c == '.' } },
-                    label = { Text("Valor de pesquisa unitário") },
+                CampoValorMonetario(
+                    valor = valorPesquisaUnit,
+                    onValorChange = { valorPesquisaUnit = it },
+                    label = "Valor de pesquisa unitário",
                     enabled = valorPesquisaLiberado,
                     supportingText = {
                         if (!valorPesquisaLiberado) {
                             Text("Disponível a partir da fase de Pesquisa de Preços")
                         }
                     },
-                    singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
                     modifier = Modifier.fillMaxWidth()
                 )
                 if (onExcluir != null) {
@@ -105,8 +108,12 @@ fun ItemFormDialog(
                         descricao.trim(),
                         quantidade.toDoubleOrNull() ?: 0.0,
                         unidade.trim(),
-                        valorEstimadoUnit.toDoubleOrNull() ?: 0.0,
-                        if (valorPesquisaLiberado) valorPesquisaUnit.toDoubleOrNull() else itemInicial?.valorPesquisaUnit
+                        valorMonetarioParaDouble(valorEstimadoUnit),
+                        if (valorPesquisaLiberado) {
+                            valorPesquisaUnit.takeIf { it.isNotBlank() }?.let(::valorMonetarioParaDouble)
+                        } else {
+                            itemInicial?.valorPesquisaUnit
+                        }
                     )
                 }
             ) { Text("Salvar") }
