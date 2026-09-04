@@ -20,7 +20,7 @@ import com.josiel.organizeprocesso.data.repository.PerfilRepository
 import com.josiel.organizeprocesso.data.repository.ProcessoRepository
 import com.josiel.organizeprocesso.domain.model.StatusSemaforo
 import com.josiel.organizeprocesso.domain.usecase.calcularSemaforo
-import com.josiel.organizeprocesso.domain.usecase.podeEditarProcesso
+import com.josiel.organizeprocesso.domain.usecase.podeAvancarFase
 import com.josiel.organizeprocesso.ui.common.mensagemDeErro
 import java.time.LocalDate
 import java.time.temporal.ChronoUnit
@@ -110,7 +110,7 @@ class AvancarFaseViewModel(
                     ?: StatusSemaforo.OK
                 val sessao = SupabaseSessionManager.perfilAtual.value
                 val podeEditar = processo != null && sessao != null &&
-                    podeEditarProcesso(sessao.papel, processo.responsavelId, sessao.id)
+                    podeAvancarFase(sessao.papel, processo.responsavelId, sessao.id)
                 Sextupla(processo, faseAtual, historico, semaforo, fases to perfis, podeEditar)
             }.collect { (processo, faseAtual, historico, semaforo, fasesPerfis, podeEditar) ->
                 val estadoAtual = _uiState.value

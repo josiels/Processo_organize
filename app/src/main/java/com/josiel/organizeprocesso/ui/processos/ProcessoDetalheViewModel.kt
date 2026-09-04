@@ -20,7 +20,7 @@ import com.josiel.organizeprocesso.domain.model.StatusSemaforo
 import com.josiel.organizeprocesso.domain.usecase.AcaoDesignacao
 import com.josiel.organizeprocesso.domain.usecase.acaoDesignacaoDisponivel
 import com.josiel.organizeprocesso.domain.usecase.calcularSemaforo
-import com.josiel.organizeprocesso.domain.usecase.podeEditarProcesso
+import com.josiel.organizeprocesso.domain.usecase.podeAvancarFase
 import com.josiel.organizeprocesso.ui.common.mensagemDeErro
 import java.time.LocalDate
 import java.time.ZoneId
@@ -168,7 +168,7 @@ class ProcessoDetalheViewModel(
                 AcaoDesignacao.NENHUMA
             },
             podeEditar = processo != null && sessao != null &&
-                podeEditarProcesso(sessao.papel, processo.responsavelId, sessao.id),
+                podeAvancarFase(sessao.papel, processo.responsavelId, sessao.id),
             perfisAtivos = perfis.filter { it.ativo }
         )
     }

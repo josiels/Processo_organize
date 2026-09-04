@@ -23,6 +23,15 @@ fun podeCriarProcesso(papel: Papel): Boolean = papel == Papel.ADMIN
 fun podeEditarProcesso(papel: Papel, responsavelId: String?, usuarioId: String): Boolean =
     papel == Papel.ADMIN || responsavelId == null || responsavelId == usuarioId
 
+/**
+ * Espelha a checagem própria de `avancar_fase()` — deliberadamente SEM a
+ * exceção de processo órfão que [podeEditarProcesso] tem: avançar/retornar
+ * fase é restrito ao responsável atual (ou admin); um processo sem
+ * responsável precisa ser assumido antes.
+ */
+fun podeAvancarFase(papel: Papel, responsavelId: String?, usuarioId: String): Boolean =
+    papel == Papel.ADMIN || responsavelId == usuarioId
+
 /** Ação de designação disponível no Detalhe do Processo (spec do Plano 2B, seção 4.3). */
 enum class AcaoDesignacao { DESIGNAR, ASSUMIR, DEVOLVER, NENHUMA }
 
