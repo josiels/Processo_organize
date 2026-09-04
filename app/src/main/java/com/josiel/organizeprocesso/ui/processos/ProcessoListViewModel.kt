@@ -10,6 +10,7 @@ import com.josiel.organizeprocesso.data.repository.FaseRepository
 import com.josiel.organizeprocesso.data.repository.PerfilRepository
 import com.josiel.organizeprocesso.data.repository.ProcessoRepository
 import com.josiel.organizeprocesso.data.repository.TipoProcessoRepository
+import com.josiel.organizeprocesso.domain.model.Papel
 import com.josiel.organizeprocesso.domain.model.StatusSemaforo
 import com.josiel.organizeprocesso.domain.usecase.calcularSemaforo
 import java.time.LocalDate
@@ -52,33 +53,40 @@ class ProcessoListViewModel(application: Application) : AndroidViewModel(applica
         val tipoProcessoMap = tiposProcesso.associateBy { it.id }
         val historicoPorProcesso = historicosAtivos.associateBy { it.processoId }
         val hoje = LocalDate.now()
+        val sessao = SupabaseSessionManager.perfilAtual.value
 
-        processos.map { processo ->
-            val historico = historicoPorProcesso[processo.id]
-            val fase = faseMap[processo.faseAtualId]
-            val diasParado = historico?.let { ChronoUnit.DAYS.between(it.dataEntrada, hoje) } ?: 0L
-            val statusSemaforo = fase?.let { calcularSemaforo(diasParado, it.diasAlertaAtencao, it.diasAlertaCritico) }
-                ?: StatusSemaforo.OK
+        // Usuário comum só vê os processos dos quais é responsável — admin
+        // continua vendo tudo (é a única tela que lista todo mundo pra poder
+        // designar/gerenciar; SUPER_ADMIN não tem tratamento especial em
+        // nenhum lugar do app, então cai na mesma regra de usuário comum).
+        processos
+            .filter { processo -> sessao == null || sessao.papel == Papel.ADMIN || processo.responsavelId == sessao.id }
+            .map { processo ->
+                val historico = historicoPorProcesso[processo.id]
+                val fase = faseMap[processo.faseAtualId]
+                val diasParado = historico?.let { ChronoUnit.DAYS.between(it.dataEntrada, hoje) } ?: 0L
+                val statusSemaforo = fase?.let { calcularSemaforo(diasParado, it.diasAlertaAtencao, it.diasAlertaCritico) }
+                    ?: StatusSemaforo.OK
 
-            val tipoProcesso = tipoProcessoMap[processo.tipoProcessoId]
-            val diasDesdeDesignado = processo.designadoEm?.let {
-                ChronoUnit.DAYS.between(it.atZone(ZoneId.systemDefault()).toLocalDate(), hoje)
+                val tipoProcesso = tipoProcessoMap[processo.tipoProcessoId]
+                val diasDesdeDesignado = processo.designadoEm?.let {
+                    ChronoUnit.DAYS.between(it.atZone(ZoneId.systemDefault()).toLocalDate(), hoje)
+                }
+                val statusSemaforoDesignacao = if (diasDesdeDesignado != null && tipoProcesso != null) {
+                    calcularSemaforo(diasDesdeDesignado, tipoProcesso.diasAlertaAtencao, tipoProcesso.diasAlertaCritico)
+                } else {
+                    StatusSemaforo.OK
+                }
+
+                ProcessoListItem(
+                    processo = processo,
+                    faseNome = fase?.nome ?: "—",
+                    responsavelNome = processo.responsavelId?.let { perfilMap[it]?.nome } ?: "Não designado",
+                    statusSemaforo = statusSemaforo,
+                    diasParado = diasParado,
+                    statusSemaforoDesignacao = statusSemaforoDesignacao,
+                    diasDesdeDesignado = diasDesdeDesignado
+                )
             }
-            val statusSemaforoDesignacao = if (diasDesdeDesignado != null && tipoProcesso != null) {
-                calcularSemaforo(diasDesdeDesignado, tipoProcesso.diasAlertaAtencao, tipoProcesso.diasAlertaCritico)
-            } else {
-                StatusSemaforo.OK
-            }
-
-            ProcessoListItem(
-                processo = processo,
-                faseNome = fase?.nome ?: "—",
-                responsavelNome = processo.responsavelId?.let { perfilMap[it]?.nome } ?: "Não designado",
-                statusSemaforo = statusSemaforo,
-                diasParado = diasParado,
-                statusSemaforoDesignacao = statusSemaforoDesignacao,
-                diasDesdeDesignado = diasDesdeDesignado
-            )
-        }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 }
