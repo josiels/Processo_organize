@@ -59,6 +59,7 @@ data class ProcessoDetalheUiState(
     val acaoDesignacao: AcaoDesignacao = AcaoDesignacao.NENHUMA,
     val podeEditar: Boolean = false,
     val perfisAtivos: List<PerfilEntity> = emptyList(),
+    val designando: Boolean = false,
     val erro: String? = null
 )
 
@@ -78,6 +79,7 @@ class ProcessoDetalheViewModel(
     private val historicoDao = database.processoFaseHistoricoDao()
 
     private val _erro = MutableStateFlow<String?>(null)
+    private val _designando = MutableStateFlow(false)
 
     // Guarda `concluir()` de ler um cache de itens ainda vazio (achado da
     // revisão final: mesmo risco de zerar valor_estimado_total já tratado em
@@ -173,20 +175,24 @@ class ProcessoDetalheViewModel(
 
     // O erro de escrita vive num fluxo próprio porque o estado principal é
     // derivado do Room (combine + stateIn) e não pode ser reatribuído.
-    val uiState: StateFlow<ProcessoDetalheUiState> = combine(estadoBase, _erro) { estado, erro ->
-        estado.copy(erro = erro)
+    val uiState: StateFlow<ProcessoDetalheUiState> = combine(estadoBase, _erro, _designando) { estado, erro, designando ->
+        estado.copy(erro = erro, designando = designando)
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ProcessoDetalheUiState())
 
-    fun designar(novoResponsavelId: String?) {
+    fun designar(novoResponsavelId: String?, motivo: String? = null) {
+        if (_designando.value) return
+        _designando.value = true
         viewModelScope.launch {
             _erro.value = null
             try {
-                processoRepository.designar(processoId, novoResponsavelId)
+                processoRepository.designar(processoId, novoResponsavelId, motivo)
             } catch (e: Exception) {
                 if (e is CancellationException) {
                     throw e
                 }
                 _erro.value = mensagemDeErro(e)
+            } finally {
+                _designando.value = false
             }
         }
     }

@@ -169,12 +169,13 @@ class ProcessoRepository(
     }
 
     /** Chama a RPC `designar_processo` — admin designa a qualquer um, ou o próprio usuário autoatribui/devolve um órfão (RLS do backend valida). */
-    suspend fun designar(processoId: String, novoResponsavelId: String?) {
+    suspend fun designar(processoId: String, novoResponsavelId: String?, motivo: String? = null) {
         client.postgrest.rpc(
             "designar_processo",
             buildJsonObject {
                 put("p_processo_id", processoId)
                 put("p_novo_responsavel_id", novoResponsavelId)
+                put("p_motivo", motivo)
             }
         )
         sincronizar()

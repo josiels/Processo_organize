@@ -27,6 +27,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SecondaryTabRow
@@ -85,6 +86,7 @@ fun ProcessoDetalheScreen(
     val estado by viewModel.uiState.collectAsState()
     var abaSelecionada by remember { mutableIntStateOf(0) }
     val onDesignar: (String?) -> Unit = { novoResponsavelId -> viewModel.designar(novoResponsavelId) }
+    val onDevolver: (String) -> Unit = { motivo -> viewModel.designar(null, motivo) }
     val onConcluir: () -> Unit = { viewModel.concluir() }
 
     Scaffold(
@@ -126,7 +128,7 @@ fun ProcessoDetalheScreen(
             }
 
             when (abaSelecionada) {
-                0 -> AbaDadosGerais(estado, onAvancarFaseClick, onConcluir, onDesignar)
+                0 -> AbaDadosGerais(estado, onAvancarFaseClick, onConcluir, onDesignar, onDevolver)
                 1 -> AbaItens(estado.itens)
                 2 -> AbaTimeline(estado.historico)
                 else -> AbaAnexos()
@@ -140,10 +142,12 @@ private fun AbaDadosGerais(
     estado: ProcessoDetalheUiState,
     onAvancarFaseClick: () -> Unit,
     onConcluir: () -> Unit,
-    onDesignar: (String?) -> Unit
+    onDesignar: (String?) -> Unit,
+    onDevolver: (String) -> Unit
 ) {
     val processo = estado.processo ?: return
     var mostrarDialogoDesignar by remember { mutableStateOf(false) }
+    var mostrarDialogoDevolver by remember { mutableStateOf(false) }
 
     Column(
         modifier = Modifier.fillMaxSize().padding(16.dp),
@@ -200,7 +204,7 @@ private fun AbaDadosGerais(
             )
             AcaoDesignacao.DEVOLVER -> PillButton(
                 text = "Devolver processo",
-                onClick = { onDesignar(null) },
+                onClick = { mostrarDialogoDevolver = true },
                 containerColor = MaterialTheme.colorScheme.secondary,
                 contentColor = MaterialTheme.colorScheme.onSecondary,
                 modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
@@ -239,7 +243,51 @@ private fun AbaDadosGerais(
                 }
             )
         }
+
+        if (mostrarDialogoDevolver) {
+            DevolverProcessoDialog(
+                designando = estado.designando,
+                onDismiss = { mostrarDialogoDevolver = false },
+                onConfirmar = { motivo ->
+                    onDevolver(motivo)
+                    mostrarDialogoDevolver = false
+                }
+            )
+        }
     }
+}
+
+@Composable
+private fun DevolverProcessoDialog(
+    designando: Boolean,
+    onDismiss: () -> Unit,
+    onConfirmar: (motivo: String) -> Unit
+) {
+    var motivo by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Devolver processo") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Tem certeza que deseja devolver este processo? Você deixará de ser responsável por ele.")
+                OutlinedTextField(
+                    value = motivo,
+                    onValueChange = { motivo = it },
+                    label = { Text("Motivo da devolução") },
+                    modifier = Modifier.fillMaxWidth()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = motivo.isNotBlank() && !designando,
+                onClick = { onConfirmar(motivo.trim()) }
+            ) { Text("Devolver") }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancelar") }
+        }
+    )
 }
 
 @Composable
