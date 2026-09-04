@@ -78,7 +78,16 @@ Deno.serve(async (_req) => {
 
     let totalEnviado = 0;
 
-    const gatilhos: Array<{ rpc: string; montarMensagem: (item: ElegivelBase & Record<string, unknown>) => { titulo: string; corpo: string } }> = [
+    const gatilhos: Array<{
+      rpc: string;
+      // Só os 2 gatilhos novos (baseados em evento único de designacoes, não
+      // em janela de tempo repetida como os 4 antigos) marcam notificado_em
+      // depois de processar — evita reenviar a mesma designação/devolução a
+      // cada ciclo do cron. Os 4 antigos ficam com o comportamento de sempre
+      // (achado de spam já parqueado, fora do escopo deste ajuste).
+      marcarNotificado?: boolean;
+      montarMensagem: (item: ElegivelBase & Record<string, unknown>) => { titulo: string; corpo: string };
+    }> = [
       {
         rpc: 'perfis_a_notificar_avanco_fase',
         montarMensagem: (item) => ({
@@ -107,6 +116,22 @@ Deno.serve(async (_req) => {
           corpo: `O processo ${item.numero} (${item.objeto}) está com você há ${item.dias_designado} dias.`,
         }),
       },
+      {
+        rpc: 'perfis_a_notificar_designacao',
+        marcarNotificado: true,
+        montarMensagem: (item) => ({
+          titulo: 'Você recebeu um processo',
+          corpo: `O processo ${item.numero} (${item.objeto}) foi designado a você.`,
+        }),
+      },
+      {
+        rpc: 'perfis_a_notificar_devolucao',
+        marcarNotificado: true,
+        montarMensagem: (item) => ({
+          titulo: 'Processo devolvido',
+          corpo: `${item.devolvido_por_nome} devolveu o processo ${item.numero} (${item.objeto}). Motivo: ${item.motivo}.`,
+        }),
+      },
     ];
 
     for (const gatilho of gatilhos) {
@@ -120,12 +145,23 @@ Deno.serve(async (_req) => {
           .from('device_tokens')
           .select('token_fcm')
           .eq('perfil_id', item.perfil_id);
-        if (tokensError || !tokensRows || tokensRows.length === 0) continue;
 
-        const { titulo, corpo } = gatilho.montarMensagem(item);
-        const tokens = tokensRows.map((r) => r.token_fcm as string);
-        await enviarParaTokens(fcmAccessToken, projectId, tokens, titulo, corpo, item.processo_id);
-        totalEnviado += tokens.length;
+        if (!tokensError && tokensRows && tokensRows.length > 0) {
+          const { titulo, corpo } = gatilho.montarMensagem(item);
+          const tokens = tokensRows.map((r) => r.token_fcm as string);
+          await enviarParaTokens(fcmAccessToken, projectId, tokens, titulo, corpo, item.processo_id);
+          totalEnviado += tokens.length;
+        }
+
+        // Marca mesmo sem token (perfil nunca logou num build com Firebase
+        // real): sem isto o evento ficaria elegível pra sempre, reprocessado
+        // a cada ciclo do cron sem nunca poder ser entregue de verdade.
+        if (gatilho.marcarNotificado && item.designacao_id) {
+          await adminClient
+            .from('designacoes')
+            .update({ notificado_em: new Date().toISOString() })
+            .eq('id', item.designacao_id as string);
+        }
       }
     }
 
